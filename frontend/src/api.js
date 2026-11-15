@@ -125,6 +125,8 @@ export async function getSettings() {
   catch { return {configured:false,offline:true} }
 }
 export const saveSettings = (payload) => post('/settings', payload)
+export const getBilibiliBrowsers = () => get('/settings/bilibili-browsers')
+export const importBilibiliCookie = (browser) => post('/settings/bilibili-cookie', { browser })
 // 只檢查指定供應商；暫時輸入的 API Key 不會儲存，成功後才讓使用者選模型。
 export const checkProvider = (payload) => post('/providers/check', payload)
 // 不需先儲存：帶入設定畫面上目前輸入的網址（後端仍只接受本機 11434 埠）

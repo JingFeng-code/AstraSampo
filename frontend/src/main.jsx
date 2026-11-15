@@ -1,13 +1,14 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
+import ErrorBoundary from './components/ErrorBoundary.jsx'
 import { I18nProvider } from './i18n/index.jsx'
 import { bootstrapDesktop } from './desktop.js'
 import './index.css'
 
 const root=ReactDOM.createRoot(document.getElementById('root'))
 bootstrapDesktop().then(()=>{
-  root.render(<React.StrictMode><I18nProvider><App /></I18nProvider></React.StrictMode>)
+  root.render(<React.StrictMode><ErrorBoundary><I18nProvider><App /></I18nProvider></ErrorBoundary></React.StrictMode>)
 }).catch(error=>{
   root.render(<main style={{padding:32,fontFamily:'sans-serif'}}>
     <h1>AstraTube 無法啟動</h1>

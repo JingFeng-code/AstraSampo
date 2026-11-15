@@ -8,6 +8,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.transcript import bilibili
+from app.transcript import router
 from app.transcript.router import route_content
 from app.api import summarize as api_summarize
 from app.api import ask as api_ask
@@ -72,9 +73,25 @@ def test_fetch_public_subtitle_and_cache():
          patch.object(bilibili.cache, "get", side_effect=lambda key: stored.get(key)), \
          patch.object(bilibili.cache, "put", side_effect=lambda key, text, chinese: stored.__setitem__(key, (text, chinese))):
         assert bilibili.fetch_transcript(BVID, 2) == ("[1] 你好 & 世界", True)
-        count = len(calls)
+        calls.clear()
+        # 第二次仍會問一次 view（拿 cid 驗證快取），但不能再抓字幕檔
         assert bilibili.fetch_transcript(BVID, 2) == ("[1] 你好 & 世界", True)
-        assert len(calls) == count, "Expected cache hit"
+        assert calls == ["https://api.bilibili.com/x/web-interface/view"], calls
+
+
+def test_cached_transcript_from_another_video_is_ignored():
+    """快取綁 cid：舊的／別的影片的快取不能拿來當這支片的字幕。"""
+    poisoned = {"text": "[1] 別的影片", "is_chinese": True, "lang": "ai-zh", "is_ai": True, "cid": 999}
+    def fake_get(url, **kwargs):
+        if url.endswith("/x/web-interface/view"):
+            return FakeResponse({"code": 0, "data": {"pages": [{"cid": 123}]}})
+        if url.endswith("/x/player/v2"):
+            return FakeResponse({"code": 0, "data": {"subtitle": {"subtitles": [
+                {"lan": "zh-Hans", "subtitle_url": "//aisubtitle.hdslb.com/ok.json", "ai_type": 0}]}}})
+        return FakeResponse({"body": [{"from": 1, "content": "這支影片"}]})
+    with patch.object(bilibili.requests, "get", side_effect=fake_get),          patch.object(bilibili.cache, "get_obj", return_value=poisoned),          patch.object(bilibili.cache, "put_obj"):
+        text, _cn, _lang, _ai = bilibili.fetch_transcript_detail(BVID, 1)
+    assert text == "[1] 這支影片", text
 
 
 def test_missing_public_subtitle():
@@ -91,8 +108,64 @@ def test_missing_public_subtitle():
             assert "需要登入" in str(exc)
 
 
+def test_sessdata_is_sent_and_ai_subtitles_are_labelled():
+    seen = []
+
+    def fake_get(url, **kwargs):
+        seen.append(kwargs.get("headers", {}).get("Cookie"))
+        if url.endswith("/x/web-interface/view"):
+            return FakeResponse({"code": 0, "data": {"pages": [{"cid": 123}]}})
+        if url.endswith("/x/player/v2"):
+            return FakeResponse({"code": 0, "data": {"subtitle": {"subtitles": [
+                {"lan": "ai-zh", "subtitle_url": "//aisubtitle.hdslb.com/ai.json", "ai_type": 1}
+            ]}}})
+        return FakeResponse({"body": [{"from": 2, "content": "自動字幕"}]})
+
+    with patch.object(bilibili.requests, "get", side_effect=fake_get),          patch.object(bilibili.cache, "get_obj", return_value=None),          patch.object(bilibili.cache, "put_obj"):
+        text, is_chinese, lang, is_ai = bilibili.fetch_transcript_detail(BVID, 1, "abc123")
+    assert text == "[2] 自動字幕" and is_chinese and is_ai and lang == "ai-zh"
+    assert seen and all(c == "SESSDATA=abc123" for c in seen), seen
+
+    seen.clear()
+    with patch.object(bilibili.requests, "get", side_effect=fake_get),          patch.object(bilibili.cache, "get_obj", return_value=None),          patch.object(bilibili.cache, "put_obj"):
+        bilibili.fetch_transcript_detail(BVID, 1)
+    assert all(c is None for c in seen), "沒有 SESSDATA 時不該送出 Cookie"
+
+
+def test_bad_sessdata_is_rejected():
+    for bad in ("a;b", "a,b", "line" + chr(10) + "break", "x" * 513):
+        try:
+            bilibili._cookie_header(bad)
+            assert False, "Invalid SESSDATA must be rejected: " + bad
+        except ValueError:
+            pass
+
+
+def test_router_falls_back_to_local_transcription():
+    with patch.object(bilibili, "fetch_transcript_detail",
+                      side_effect=ValueError("這支影片的字幕需要登入才能讀取。")),          patch.object(router.audio_transcript, "transcribe",
+                      return_value=("[0] 本機轉錄", True, "local_speech")) as transcribe:
+        content = route_content(f"https://www.bilibili.com/video/{BVID}/")
+    assert content["type"] == "bilibili"
+    assert content["transcript_source"] == "local_speech"
+    assert content["text"] == "[0] 本機轉錄"
+    transcribe.assert_called_once()
+
+
+def test_router_keeps_both_reasons_when_transcription_is_unavailable():
+    with patch.object(bilibili, "fetch_transcript_detail",
+                      side_effect=ValueError("字幕需要登入。")),          patch.object(router.audio_transcript, "transcribe",
+                      side_effect=ValueError("桌面版沒有內建語音轉錄。")):
+        try:
+            route_content(f"https://www.bilibili.com/video/{BVID}/")
+            assert False, "Must fail when nothing can fetch the transcript"
+        except ValueError as exc:
+            assert "字幕需要登入" in str(exc) and "沒有內建語音轉錄" in str(exc)
+
+
 def test_router_and_ask_use_bilibili_cache():
-    with patch.object(bilibili, "fetch_transcript", return_value=("[15] 測試逐字稿", True)):
+    with patch.object(bilibili, "fetch_transcript_detail",
+                      return_value=("[15] 測試逐字稿", True, "zh-hans", False)):
         content = route_content(f"https://www.bilibili.com/video/{BVID}/?p=3")
         assert content["type"] == "bilibili"
         assert content["bilibili_page"] == 3
@@ -133,7 +206,12 @@ if __name__ == "__main__":
     test_video_url()
     test_allowed_subtitle_domains()
     test_fetch_public_subtitle_and_cache()
+    test_cached_transcript_from_another_video_is_ignored()
     test_missing_public_subtitle()
+    test_sessdata_is_sent_and_ai_subtitles_are_labelled()
+    test_bad_sessdata_is_rejected()
+    test_router_falls_back_to_local_transcription()
+    test_router_keeps_both_reasons_when_transcription_is_unavailable()
     test_router_and_ask_use_bilibili_cache()
     test_summary_stream_has_bilibili_metadata()
     print("Bilibili 公開字幕測試通過。")

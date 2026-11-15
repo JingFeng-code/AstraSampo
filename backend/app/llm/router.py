@@ -13,7 +13,7 @@ provider 格式：
 from typing import Any, Callable, Optional, Tuple
 
 from app.core import messages
-from app.llm import anthropic_api, gemini, opencode, openai_compat, ollama
+from app.llm import anthropic_api, gemini, ollama, ollama_cloud, openai_compat, opencode
 from app.llm.base import NotConfiguredError, RefusalError, TruncatedOutputError
 
 AUTO = "auto"
@@ -24,9 +24,10 @@ DEEPSEEK = "deepseek"
 OPENAI = "openai"
 ANTHROPIC = "anthropic"
 OLLAMA = "ollama"
+OLLAMA_CLOUD = "ollama-cloud"
 
 # 帶 "<kind>:<model>" 前綴的供應商
-_PREFIXED = (OPENCODE, DEEPSEEK, OPENAI, ANTHROPIC, OLLAMA, GEMINI,
+_PREFIXED = (OPENCODE, DEEPSEEK, OPENAI, ANTHROPIC, OLLAMA_CLOUD, OLLAMA, GEMINI,
              "openrouter", "groq", "mistral", "together")
 
 # 自動模式的首選（免費、不需金鑰）
@@ -68,6 +69,8 @@ def _default_model(kind: str) -> str:
         return gemini.MODEL
     if kind == OLLAMA:
         return ollama.default_model()
+    if kind == OLLAMA_CLOUD:
+        return ""
     if kind == ANTHROPIC:
         return anthropic_api.DEFAULT_MODEL
     if kind in openai_compat.VENDORS:
@@ -83,6 +86,8 @@ def _call(kind: str, model: str, prompt: str, system: str, seg: int,
         return gemini.generate(prompt, system, seg=seg, on_status=on_status, model=model)
     if kind == OLLAMA:
         return ollama.generate(prompt, system, model=model, seg=seg, on_status=on_status)
+    if kind == OLLAMA_CLOUD:
+        return ollama_cloud.generate(prompt, system, model=model, seg=seg, on_status=on_status)
     if kind == ANTHROPIC:
         return anthropic_api.generate(prompt, system, model=model, on_status=on_status)
     if kind in openai_compat.VENDORS:

@@ -76,6 +76,10 @@ class RevealRequest(BaseModel):
     path: str
 
 
+class BrowserCookieRequest(BaseModel):
+    browser: str    # firefox / chrome / edge / brave / opera / vivaldi
+
+
 class SettingsUpdate(BaseModel):
     # 只更新有提供的欄位；傳空字串代表清除該設定
     gemini_api_key: Optional[str] = None
@@ -87,9 +91,11 @@ class SettingsUpdate(BaseModel):
     groq_api_key: Optional[str] = None
     mistral_api_key: Optional[str] = None
     together_api_key: Optional[str] = None
+    ollama_cloud_api_key: Optional[str] = None
     ollama_base_url: Optional[str] = None
     ollama_model: Optional[str] = None
     output_language: Optional[str] = None
     ui_language: Optional[str] = None      # 介面語言（zh-Hant／en），也決定後端錯誤訊息的語言
     obsidian_vault_path: Optional[str] = None
     obsidian_notes_folder: Optional[str] = None
+    bilibili_sessdata: Optional[str] = None   # B 站登入 cookie（只存本機 settings.json）

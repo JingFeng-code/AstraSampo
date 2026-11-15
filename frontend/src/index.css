@@ -171,7 +171,7 @@ button:disabled{cursor:not-allowed}
 .deck-head{display:flex;align-items:center;gap:8px;margin-bottom:12px;min-width:0}
 .deck-title{margin:0;min-width:0;flex:1 1 auto;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;color:var(--text);font-size:16px;font-weight:750;letter-spacing:-.015em}
 .deck-count{margin-left:auto;color:var(--text-faint);font:600 12px/1 var(--mono);font-variant-numeric:tabular-nums;flex-shrink:0}
-.model-badge{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border:1px solid var(--border);border-radius:var(--radius-small);background:var(--surface-2);color:var(--text-faint);padding:4px 7px;font:600 12px/1.2 var(--mono)}
+.model-badge{max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border:1px solid var(--border);border-radius:var(--radius-small);background:var(--surface-2);color:var(--text);padding:4px 7px;font:600 12px/1.2 var(--mono)}
 .deck-nav{display:flex;align-items:center;gap:10px;margin-bottom:12px}
 .deck-nav-top{position:sticky;top:8px;z-index:3;background:var(--surface);padding:4px 0}
 .nav-arrow{width:38px;height:34px;flex-shrink:0;border:1px solid var(--border);border-radius:var(--radius-control);background:var(--surface);color:var(--text);font-size:16px;transition:all .2s ease}
@@ -282,7 +282,7 @@ button:disabled{cursor:not-allowed}
   .workspace{grid-template-columns:minmax(0,1fr);gap:14px}.splitter{display:none}.pane-video,.deck{grid-column:1;min-width:0}.chapters{max-height:30vh}
 }
 @media(max-width:720px){
-  .topbar{flex-wrap:wrap}.vault-chip{order:3;margin-left:49px}.input-row{grid-template-columns:1fr 1fr}.url-field{grid-column:1/-1}.model-field{grid-column:1}.deep-visual-toggle{grid-column:2;grid-row:auto;width:100%}.btn-go{grid-column:1/-1;grid-row:auto;width:100%}.workspace{padding-inline:12px}.model-badge{display:none}.float-panel.br{right:12px;bottom:12px}.float-panel.bl{left:12px;bottom:12px}.float-window{width:calc(100vw - 24px)}
+  .topbar{flex-wrap:wrap}.vault-chip{order:3;margin-left:49px}.input-row{grid-template-columns:1fr 1fr}.url-field{grid-column:1/-1}.model-field{grid-column:1}.deep-visual-toggle{grid-column:2;grid-row:auto;width:100%}.btn-go{grid-column:1/-1;grid-row:auto;width:100%}.workspace{padding-inline:12px}.model-badge{max-width:120px}.float-panel.br{right:12px;bottom:12px}.float-panel.bl{left:12px;bottom:12px}.float-window{width:calc(100vw - 24px)}
 }
 @media(max-width:480px){
   .topbar{gap:8px}.brand{width:100%}.vault-chip{margin-left:0}.input-row{grid-template-columns:1fr}.model-field,.deep-visual-toggle{grid-column:1}.card{padding:21px 17px}.card h2{font-size:23px}.empty-state{padding:34px 24px}.deck-head{flex-wrap:wrap}.deck-count{order:2}.settings-head,.settings-body,.settings-foot{padding-left:18px;padding-right:18px}
@@ -591,3 +591,15 @@ button:disabled{cursor:not-allowed}
   .workspace-split .deck{flex:1 1 0}
   .workspace[data-result-tab=subtitles] .pane-video,.workspace[data-result-tab=chapters] .pane-video{flex:1 1 0}
 }
+
+/* 卡片上方的整體總結（模型收斂後的 summary + 重點） */
+.deck-overview{margin:0 0 14px;padding:14px 16px;border:1px solid var(--line);border-radius:12px;background:var(--paper)}
+.deck-overview-title{margin:0 0 6px;font-size:13px;letter-spacing:.08em;color:var(--muted)}
+.deck-overview p{margin:0 0 8px;line-height:1.75}
+.deck-overview .summary-list{margin:0;padding-left:1.2em}
+
+/* 保底卡（模型沒有給分析）的說明，避免把實作細節寫進標題 */
+.card-fallback-note{margin:-4px 0 10px;font-size:12.5px;color:var(--text-faint)}
+/* B 站站外播放器無法回報進度時的出口 */
+.video-open-external{display:inline-block;margin-top:6px;font-size:12.5px;color:var(--text-faint);text-decoration:underline}
+.video-open-external:hover{color:var(--text)}

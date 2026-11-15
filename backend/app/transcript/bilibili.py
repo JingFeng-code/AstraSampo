@@ -1,4 +1,6 @@
-"""Bilibili 公開影片字幕擷取：只讀可匿名取得的字幕，不下載影音或處理登入態。"""
+"""Bilibili 字幕擷取：匿名可讀的就直接讀；需要登入的影片用使用者自己提供的
+SESSDATA（只在設定頁輸入、存在本機 settings.json）讀取，不代替使用者登入、
+不儲存帳號密碼。沒有 SESSDATA 時行為與從前相同（只讀公開字幕）。"""
 from __future__ import annotations
 
 import html
@@ -14,6 +16,21 @@ _VIDEO_PATH = re.compile(r"^/video/(BV[0-9A-Za-z]{10})(?:/|$)")
 _CACHE_PREFIX = "bilibili_v1:"
 _HEADERS = {"User-Agent": "AstraTube/1.0 (public subtitle reader)", "Accept": "application/json"}
 _MAX_SUBTITLE_BYTES = 12 * 1024 * 1024
+# SESSDATA 是使用者貼上的單一 cookie 值；長度與字元都先擋掉，避免把
+# 任意內容塞進 Cookie 標頭（或撐爆請求）。
+_SESSDATA_MAX = 512
+
+
+def _cookie_header(sessdata: str | None) -> dict[str, str]:
+    """把使用者提供的 SESSDATA 轉成 Cookie 標頭；沒提供就回空字典。"""
+    value = (sessdata or "").strip()
+    if not value:
+        return {}
+    if (len(value) > _SESSDATA_MAX
+            or any(ord(ch) < 32 for ch in value)
+            or ";" in value or "," in value):
+        raise ValueError("Bilibili SESSDATA 格式不正確（不可含換行、分號或逗號，最長 512 字元）。")
+    return {"Cookie": f"SESSDATA={value}"}
 
 
 def parse_video_url(url: str) -> tuple[str, int] | None:
@@ -55,11 +72,11 @@ _API_CODES = {
 }
 
 
-def _api_json(path: str, params: dict, referer: str) -> dict:
+def _api_json(path: str, params: dict, referer: str, cookie: dict[str, str] | None = None) -> dict:
     try:
         response = requests.get(
             f"https://api.bilibili.com{path}", params=params,
-            headers={**_HEADERS, "Referer": referer}, timeout=15,
+            headers={**_HEADERS, "Referer": referer, **(cookie or {})}, timeout=15,
         )
     except requests.RequestException as exc:
         raise ValueError("無法連線到 Bilibili（網路、Proxy 或防火牆問題），請確認網路後重試。") from exc
@@ -94,11 +111,11 @@ def _subtitle_url(url: str) -> str:
     return full
 
 
-def _load_subtitle(url: str, referer: str) -> list[dict]:
+def _load_subtitle(url: str, referer: str, cookie: dict[str, str] | None = None) -> list[dict]:
     endpoint = _subtitle_url(url)
     try:
         # 拒絕重導向，以免字幕 CDN 被利用去請求任意內網位置。
-        response = requests.get(endpoint, headers={**_HEADERS, "Referer": referer},
+        response = requests.get(endpoint, headers={**_HEADERS, "Referer": referer, **(cookie or {})},
                                 timeout=20, allow_redirects=False)
         response.raise_for_status()
         if response.status_code in (301, 302, 303, 307, 308):
@@ -117,14 +134,18 @@ def _load_subtitle(url: str, referer: str) -> list[dict]:
     return payload["body"]
 
 
-def fetch_transcript(bvid: str, page: int = 1) -> tuple[str, bool]:
-    key = transcript_cache_key(bvid, page)
-    hit = cache.get(key)
-    if hit is not None:
-        return hit
+def fetch_transcript_detail(bvid: str, page: int = 1,
+                            sessdata: str | None = None) -> tuple[str, bool, str, bool]:
+    """回傳 (逐字稿, 是否中文, 字幕語言, 是否 AI 自動生成)。
 
+    語言與 ai_type 會顯示在知識卡上，讓使用者知道這份逐字稿是人工字幕還是
+    B 站自動生成的——摘要出錯時才分得出是字幕本身還是模型的問題。
+    """
+    cookie = _cookie_header(sessdata)
     referer = f"https://www.bilibili.com/video/{bvid}/"
-    detail = _api_json("/x/web-interface/view", {"bvid": bvid}, referer)
+    # 先取得 cid 再查快取：快取要綁 cid，否則不同影片（或不同分 P）的資料
+    # 一旦寫進同一個 bvid，就會出現「摘要跟影片完全無關」的結果。
+    detail = _api_json("/x/web-interface/view", {"bvid": bvid}, referer, cookie)
     pages = detail.get("pages") or []
     if not isinstance(pages, list) or not 1 <= page <= len(pages):
         raise ValueError(f"Bilibili 影片沒有第 {page} 個分 P，請確認連結。")
@@ -132,12 +153,22 @@ def fetch_transcript(bvid: str, page: int = 1) -> tuple[str, bool]:
     if not isinstance(cid, int) or cid <= 0:
         raise ValueError("Bilibili 未提供有效的影片 CID。")
 
-    player = _api_json("/x/player/v2", {"bvid": bvid, "cid": cid}, referer)
+    key = transcript_cache_key(bvid, page)
+    hit = cache.get_obj(key)
+    if isinstance(hit, dict) and isinstance(hit.get("text"), str) and hit.get("cid") == cid:
+        return (hit["text"], bool(hit.get("is_chinese", False)),
+                str(hit.get("lang") or ""), bool(hit.get("is_ai", False)))
+
+    player = _api_json("/x/player/v2", {"bvid": bvid, "cid": cid}, referer, cookie)
     subtitles = (player.get("subtitle") or {}).get("subtitles") or []
     if not subtitles:
         if player.get("need_login_subtitle"):
-            raise ValueError("這支 Bilibili 影片的字幕需要登入才能讀取，AstraTube 不會使用你的帳號登入。"
-                             "如果你有這支影片可使用的字幕檔，可以匯入 SRT／VTT 後再分析。")
+            if cookie:
+                raise ValueError("這支 Bilibili 影片的字幕需要登入才能讀取，但你設定的 SESSDATA "
+                                 "沒有取得字幕（可能已過期）。請重新複製 SESSDATA 後再試。")
+            raise ValueError("這支 Bilibili 影片的字幕需要登入才能讀取。在設定頁貼上你自己的 "
+                             "SESSDATA 後可以讀取，AstraTube 不會代替你登入。"
+                             "如果你有這支影片可使用的字幕檔，也可以匯入 SRT／VTT 後再分析。")
         raise ValueError("這支 Bilibili 影片沒有可公開取得的字幕，AstraTube 不會下載影音來轉錄。"
                          "如果你有這支影片可使用的字幕檔，可以匯入 SRT／VTT 後再分析。")
 
@@ -151,7 +182,7 @@ def fetch_transcript(bvid: str, page: int = 1) -> tuple[str, bool]:
     if not subtitle:
         raise ValueError("Bilibili 字幕列表無有效項目。")
     chosen = subtitle[0]
-    rows = _load_subtitle(chosen.get("subtitle_url"), referer)
+    rows = _load_subtitle(chosen.get("subtitle_url"), referer, cookie)
     lines = []
     for entry in rows:
         if not isinstance(entry, dict):
@@ -167,6 +198,16 @@ def fetch_transcript(bvid: str, page: int = 1) -> tuple[str, bool]:
             lines.append(f"[{int(second)}] {text}")
     if not lines:
         raise ValueError("Bilibili 提供的字幕內容為空，無法進行分析。")
-    result = ("\n".join(lines), str(chosen.get("lan", "")).lower().startswith(("zh", "ai-zh")))
-    cache.put(key, *result)
+    lang = str(chosen.get("lan", "")).lower()
+    is_ai = bool(chosen.get("ai_type")) or lang.startswith("ai-")
+    result = (chr(10).join(lines), lang.startswith(("zh", "ai-zh")), lang, is_ai)
+    cache.put_obj(key, {"text": result[0], "is_chinese": result[1], "lang": result[2],
+                        "is_ai": result[3], "cid": cid})
     return result
+
+
+def fetch_transcript(bvid: str, page: int = 1,
+                     sessdata: str | None = None) -> tuple[str, bool]:
+    """舊介面：只回 (逐字稿, 是否中文)；需要字幕來源請用 fetch_transcript_detail。"""
+    text, is_chinese, _lang, _is_ai = fetch_transcript_detail(bvid, page, sessdata)
+    return text, is_chinese

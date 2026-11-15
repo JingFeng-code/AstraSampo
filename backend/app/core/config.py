@@ -45,6 +45,8 @@ _FIELDS: tuple[str, ...] = (
     "UI_LANGUAGE",
     "CLI_EFFORT",
     "WATCH_VISION_MODEL",
+    "BILIBILI_SESSDATA",
+    "OLLAMA_CLOUD_API_KEY",
 )
 
 _DEFAULT_FOLDER = "Youtube Card Reader"

@@ -164,9 +164,11 @@ def save_cues(platform: str, video_id: str, page: int, fmt: str, cues: list[dict
               visuals: list[dict] | None = None) -> dict:
     """fmt 是 srt／vtt；本機語音轉文字是 asr；陪看模式是 watch，另外帶畫面筆記。"""
     path = _file_path(platform, video_id, page)
-    # 只根據字幕內容猜測；不會將全部原文強制簡繁轉換。
-    total = sum(len(cue["text"]) for cue in cues)
-    chinese = sum(sum("\u3400" <= char <= "\u9fff" for char in cue["text"]) for cue in cues)
+    # 只根據字幕內容猜測；不會將全部原文強制簡繁轉換。沒有語音時（只有畫面筆記）
+    # 要用畫面筆記的文字判斷語言，否則純中文的筆記會被當成外文。
+    texts = [cue["text"] for cue in cues] + [str(item["text"]) for item in visuals or []]
+    total = sum(len(text) for text in texts)
+    chinese = sum(sum("㐀" <= char <= "鿿" for char in text) for text in texts)
     payload = {
         "format": fmt, "cues": cues, "is_chinese": chinese > total * 0.2,
         "version": 1, "platform": platform, "video_id": video_id, "page": page,
@@ -190,9 +192,14 @@ def load(platform: str, video_id: str, page: int = 1) -> dict | None:
     path = _file_path(platform, video_id, page)
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
+        # 陪看可能只有畫面筆記（沒有語音）：這時候 cues 是空的，但內容是有效的。
+        cues = data.get("cues")
+        visuals = data.get("visuals")
+        has_cues = isinstance(cues, list) and bool(cues)
+        has_visuals = isinstance(visuals, list) and bool(visuals)
         if (data.get("version") != 1 or data.get("platform") != platform
                 or data.get("video_id") != video_id or data.get("page") != page
-                or not isinstance(data.get("cues"), list) or not data["cues"]):
+                or not isinstance(cues, list) or not (has_cues or has_visuals)):
             return None
         return data
     except (OSError, TypeError, ValueError, AttributeError):

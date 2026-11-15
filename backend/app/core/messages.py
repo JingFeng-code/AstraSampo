@@ -26,6 +26,28 @@ LANGUAGES = ("zh-Hant", "en")
 # key 命名：<模組>.<情境>。值一律 str，需要變數就用 str.format 的具名欄位。
 MESSAGES: dict[str, dict[str, str]] = {
     # ── 設定 ────────────────────────────────────────────────
+    "settings.cookie_missing": {
+        "zh-Hant": "找不到 {browser} 的瀏覽器資料，請確認你有安裝並登入過 B 站。",
+        "en": "No {browser} profile found. Make sure the browser is installed and signed in to Bilibili.",
+    },
+    "settings.cookie_locked": {
+        "zh-Hant": "{browser} 的 cookie 被系統加密保護，目前讀不出來（Chrome／Edge 127 以後的已知限制）。"
+                   "請改用 Firefox，或手動貼上 SESSDATA。",
+        "en": "{browser} cookies are protected by App-Bound Encryption and cannot be read yet "
+              "(known Chrome/Edge 127+ limitation). Use Firefox, or paste SESSDATA manually.",
+    },
+    "settings.cookie_no_session": {
+        "zh-Hant": "{browser} 裡沒有 B 站登入狀態，請先在該瀏覽器登入 bilibili.com 再試一次。",
+        "en": "No Bilibili session in {browser}. Sign in to bilibili.com in that browser first.",
+    },
+    "settings.cookie_error": {
+        "zh-Hant": "讀取 {browser} 的 cookie 時發生錯誤：{error}",
+        "en": "Reading cookies from {browser} failed: {error}",
+    },
+    "settings.bilibili_sessdata_invalid": {
+        "zh-Hant": "SESSDATA 格式不正確：不可含換行、分號或逗號，最長 512 字元。",
+        "en": "Invalid SESSDATA: no line breaks, semicolons or commas, and at most 512 characters.",
+    },
     "settings.save_failed": {
         "zh-Hant": "無法寫入設定檔：{error}",
         "en": "Could not write the settings file: {error}",
@@ -72,6 +94,14 @@ MESSAGES: dict[str, dict[str, str]] = {
     "summarize.fetch_failed": {
         "zh-Hant": "無法取得這個網址的內容。請確認網址與網路後再試一次。",
         "en": "Could not fetch the content at this URL. Check the URL and your connection, then try again.",
+    },
+    "summarize.fallback_heading": {
+        "zh-Hant": "逐字稿重點",
+        "en": "Transcript highlights",
+    },
+    "summarize.fallback_model": {
+        "zh-Hant": "逐字稿（無模型輸出）",
+        "en": "transcript only (no model output)",
     },
     "summarize.all_segments_failed": {
         "zh-Hant": "摘要失敗：所有片段都無法產生，請稍後再試或換模型。",
@@ -370,6 +400,10 @@ MESSAGES: dict[str, dict[str, str]] = {
         "zh-Hant": "最後一段還在處理，已停止擷取。請稍等一下，再按一次「完成並整理重點」。",
         "en": "The last part is still being processed and capture has stopped. Wait a moment, then press \"Finish and build cards\" again.",
     },
+    "watch.nothing_captured": {
+        "zh-Hant": "沒有錄到聲音，也沒有擷取到任何畫面。請確認影片在播放、播放器可見，且「看畫面的模型」沒有選成只看聲音。",
+        "en": "No audio and no frames were captured. Make sure the video is playing, the player is visible, and a screen model is selected.",
+    },
     "watch.nothing_heard": {
         "zh-Hant": "沒有錄到任何說話的聲音。請確認影片有在播放，而且聲音沒有被靜音。",
         "en": "No speech was captured. Make sure the video was playing and not muted.",
@@ -387,6 +421,46 @@ MESSAGES: dict[str, dict[str, str]] = {
     "provider.http_error": {
         "zh-Hant": "{vendor} HTTP {status}：{detail}",
         "en": "{vendor} HTTP {status}: {detail}",
+    },
+    "provider.empty_answer": {
+        "zh-Hant": "{vendor} 沒有回傳任何文字，請換一個模型再試。",
+        "en": "{vendor} returned no text. Try another model.",
+    },
+    "provider.ollama_cloud_no_key": {
+        "zh-Hant": "尚未設定 Ollama Cloud API key，請到「設定 → AI 來源 → Ollama Cloud」填入。",
+        "en": "No Ollama Cloud API key yet. Add one in Settings → AI source → Ollama Cloud.",
+    },
+    "provider.ollama_cloud_bad_key": {
+        "zh-Hant": "Ollama Cloud 金鑰無效或已撤銷，請到 ollama.com 重新建立後再填入。",
+        "en": "The Ollama Cloud key is invalid or revoked. Create a new one at ollama.com.",
+    },
+    "provider.ollama_cloud_connected": {
+        "zh-Hant": "已連線 Ollama Cloud，可用模型 {count} 個。",
+        "en": "Connected to Ollama Cloud with {count} models.",
+    },
+    "provider.ollama_cloud_no_model": {
+        "zh-Hant": "請先選擇一個 Ollama Cloud 模型。",
+        "en": "Pick an Ollama Cloud model first.",
+    },
+    "provider.ollama_cloud_rate_limited": {
+        "zh-Hant": "Ollama Cloud 目前限流或額度用盡，請稍後再試（可在 ollama.com 查看額度）。",
+        "en": "Ollama Cloud is rate limiting or out of quota. Try later (check usage on ollama.com).",
+    },
+    "provider.ollama_cloud_model_missing": {
+        "zh-Hant": "Ollama Cloud 上找不到模型 {model}，請在設定頁重新取得模型清單。",
+        "en": "Ollama Cloud does not have {model}. Refresh the model list in Settings.",
+    },
+    "provider.ollama_cloud_timeout": {
+        "zh-Hant": "Ollama Cloud 超過 5 分鐘沒有輸出，請換較小的模型或稍後再試。",
+        "en": "Ollama Cloud sent nothing for 5 minutes. Try a smaller model or later.",
+    },
+    "provider.ollama_cloud_bad_response": {
+        "zh-Hant": "Ollama Cloud 回應格式不正確，請稍後再試。",
+        "en": "Ollama Cloud returned an unexpected response. Try again.",
+    },
+    "provider.ollama_cloud_interrupted": {
+        "zh-Hant": "Ollama Cloud 回答到一半中斷，請再試一次。",
+        "en": "The Ollama Cloud answer was cut off. Please try again.",
     },
     "provider.hint_auth": {
         "zh-Hant": "服務拒絕存取：可能需要 API Key、金鑰無效，或目前網路／地區被限制。可在 AI 來源改用其他模型或本機 Ollama。",

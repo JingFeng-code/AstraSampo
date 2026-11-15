@@ -4,6 +4,7 @@ import * as api from '../api.js'
 // 供應商清單與可用性分開：模型必須等金鑰／連線檢查後才顯示。
 export const STATIC_PROVIDERS = {
   ollama: { label:'Ollama（本機）', free:true, configured:false, source:'local', models:[] },
+  'ollama-cloud': { label:'Ollama Cloud', free:false, configured:false, source:'unverified', models:[] },
   gemini: { label:'Google Gemini', free:false, configured:false, source:'unverified', models:[] },
   openai: { label:'OpenAI', free:false, configured:false, source:'unverified', models:[] },
   deepseek: { label:'DeepSeek', free:false, configured:false, source:'unverified', models:[] },
@@ -14,7 +15,7 @@ export const STATIC_PROVIDERS = {
   together: { label:'Together AI', free:false, configured:false, source:'unverified', models:[] },
 }
 
-export const PROVIDER_ORDER = ['ollama', 'gemini', 'openai', 'deepseek', 'anthropic',
+export const PROVIDER_ORDER = ['ollama', 'ollama-cloud', 'gemini', 'openai', 'deepseek', 'anthropic',
   'openrouter', 'groq', 'mistral', 'together']
 
 export const providerValue = (kind, model) => `${kind}:${model}`

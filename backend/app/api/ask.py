@@ -40,7 +40,7 @@ def _load_transcript(video_id: Optional[str]) -> Optional[str]:
         if cached:
             return cached[0]
         try:
-            return bilibili.fetch_transcript(bvid, page)[0]
+            return bilibili.fetch_transcript(bvid, page, config.get("BILIBILI_SESSDATA"))[0]
         except ValueError:
             return None
     if re.fullmatch(r"[A-Za-z0-9_-]{11}", video_id):

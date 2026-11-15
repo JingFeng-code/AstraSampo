@@ -17,6 +17,21 @@ export default function CardDeck({ result, index, setIndex, clippedIds, onClip, 
   },[index])
   // 重點欄會自己捲動，換一張卡時要從頭開始看
   useEffect(()=>{ if(deckRef.current) deckRef.current.scrollTop=0 },[index])
+  // 模型這次沒有回傳任何卡片（短片、辨識不到內容、或輸出被截斷）：
+  // 以前這裡會直接讀 card.heading 而讓整個畫面變成空白，現在改成看得到的說明。
+  const overview=result.overview
+  if(!cards.length) return (
+    <section className="deck deck-empty">
+      {overview&&(overview.summary||overview.points?.length)&&<div className="deck-overview">
+        <h3 className="deck-overview-title">{t('deck.overview')}</h3>
+        {overview.summary&&<p>{overview.summary}</p>}
+        {(overview.points||[]).length>0&&<ul className="summary-list">{overview.points.map((p,i)=><li key={i}>{p}</li>)}</ul>}
+      </div>}
+      <p className="deck-empty-title">{t('deck.empty')}</p>
+      <p className="deck-empty-hint">{t('deck.emptyHint')}</p>
+      {result.transcript_source&&<p className="deck-empty-hint">{t('deck.emptySource',t(TRANSCRIPT_SOURCE_KEYS[result.transcript_source]||result.transcript_source))}</p>}
+    </section>
+  )
   if (!card) return null
   const transcript=pickField(card,TRANSCRIPT_KEYS), translation=pickField(card,TRANSLATION_KEYS)
   const points=summaryLines(card.summary)
@@ -27,6 +42,11 @@ export default function CardDeck({ result, index, setIndex, clippedIds, onClip, 
   const [kbdL,kbdR,kbdMid,kbdN,kbdTail]=t('deck.kbdHint','←','→','N')
   return (
     <section className={`deck ${fullWidth?'deck-full':''}`} ref={deckRef}>
+      {overview&&(overview.summary||(overview.points||[]).length>0)&&<div className="deck-overview">
+        <h3 className="deck-overview-title">{t('deck.overview')}</h3>
+        {overview.summary&&<p>{overview.summary}</p>}
+        {(overview.points||[]).length>0&&<ul className="summary-list">{overview.points.map((p,i)=><li key={i}>{p}</li>)}</ul>}
+      </div>}
       <div className="deck-head">
         <h2 className="deck-title">{result.title}</h2>
         {result.model_used&&<span className="model-badge" title={t('deck.modelTitle')}>{result.model_used}{result.segments>1?t('deck.segments',result.segments):''}</span>}
@@ -44,9 +64,10 @@ export default function CardDeck({ result, index, setIndex, clippedIds, onClip, 
       <article className={`card ${isClipped?'clipped':''}`} key={index}>
         <div className="card-meta">
           <span>{t('deck.card',String(index+1).padStart(2,'0'))}</span>
-          {isYT&&card.timestamp_seconds!=null&&<button className="card-ts" onClick={()=>onJumpVideo(index)}>▶ {fmtTime(card.timestamp_seconds)}</button>}
+          {isYT&&card.timestamp_seconds!=null&&<button className="card-ts" title={t('deck.jumpPlay')} onClick={()=>onJumpVideo(index)}>▶ {fmtTime(card.timestamp_seconds)}</button>}
         </div>
         <h2>{card.heading}</h2>
+        {card.fallback&&<p className="card-fallback-note">{t('deck.fallbackNote')}</p>}
         {points.length>1?<ul className="summary-list">{points.map((p,i)=><li key={i}>{p}</li>)}</ul>:<p className="summary">{card.summary}</p>}
         {transcript&&<blockquote className="transcript"><span className="label">{t('deck.transcript')}</span>{transcript}{translation&&<><br/><span style={{color:'var(--ink)'}}>{translation}</span></>}</blockquote>}
         {card.visual&&<blockquote className="transcript"><span className="label">{t('deck.visual')}</span>{card.visual}</blockquote>}

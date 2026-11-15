@@ -75,7 +75,9 @@ export function start(win = window) {
   function apply(command) {
     if (!ready || !player) { pending = command; return }
     player.seekTo(command.seconds, true)
+    // play=false 是「跳到這一秒但不要自動播放」：暫停才會真的停在那個位置
     if (command.play) player.playVideo()
+    else player.pauseVideo()
   }
 
   win.addEventListener('message', event => {

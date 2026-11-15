@@ -154,12 +154,27 @@ def test_bilibili_login_restriction_is_kept_and_suggests_import():
         _Resp(200, {"code": 0, "data": {"pages": [{"cid": 123}]}}),
         _Resp(200, {"code": 0, "data": {"subtitle": {"subtitles": []}, "need_login_subtitle": True}}),
     ]
-    with patch.object(bilibili.requests, "get", side_effect=responses), \
-         patch.object(bilibili.cache, "get", return_value=None):
+    with patch.object(bilibili.requests, "get", side_effect=responses),          patch.object(bilibili.cache, "get_obj", return_value=None),          patch.object(bilibili.cache, "put_obj"):
         try:
             bilibili.fetch_transcript("BV1WQHP66EPS", 1)
         except ValueError as exc:
-            assert "需要登入" in str(exc) and "不會使用你的帳號" in str(exc) and "SRT" in str(exc)
+            # 訊息要同時交代「為什麼讀不到」「可以貼 SESSDATA」「也可以匯入字幕」
+            message = str(exc)
+            assert "需要登入" in message and "SESSDATA" in message and "SRT" in message
+        else:
+            raise AssertionError("login-only subtitles must not be fetched")
+
+
+def test_bilibili_expired_sessdata_is_reported_as_such():
+    responses = [
+        _Resp(200, {"code": 0, "data": {"pages": [{"cid": 123}]}}),
+        _Resp(200, {"code": 0, "data": {"subtitle": {"subtitles": []}, "need_login_subtitle": True}}),
+    ]
+    with patch.object(bilibili.requests, "get", side_effect=responses),          patch.object(bilibili.cache, "get_obj", return_value=None),          patch.object(bilibili.cache, "put_obj"):
+        try:
+            bilibili.fetch_transcript("BV1WQHP66EPS", 1, "expired-cookie")
+        except ValueError as exc:
+            assert "過期" in str(exc)
         else:
             raise AssertionError("login-only subtitles must not be fetched")
 
@@ -180,5 +195,6 @@ if __name__ == "__main__":
     test_desktop_message_names_the_real_caption_problem()
     test_bilibili_errors_are_distinguished()
     test_bilibili_login_restriction_is_kept_and_suggests_import()
+    test_bilibili_expired_sessdata_is_reported_as_such()
     test_bilibili_deep_visual_still_rejected_by_backend()
     print("Caption diagnostics tests passed")

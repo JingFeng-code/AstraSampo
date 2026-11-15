@@ -30,7 +30,8 @@ def test_youtube_subtitle_response():
 def test_bilibili_subtitle_response_and_page():
     with patch.object(subtitles.bilibili, "fetch_transcript", return_value=("[0] 測試\n[12] 下一句", True)) as mock:
         result = subtitles.get_subtitles("bilibili", "BV1B7411m7LV", 3)
-    mock.assert_called_once_with("BV1B7411m7LV", 3)
+    # 第三個參數是使用者在設定頁提供的 B 站 SESSDATA（沒有設定時是空字串）
+    mock.assert_called_once_with("BV1B7411m7LV", 3, "")
     assert result["page"] == 3
     assert result["is_chinese"] is True
 

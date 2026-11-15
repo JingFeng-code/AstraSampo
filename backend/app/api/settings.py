@@ -6,7 +6,8 @@ from fastapi import APIRouter, HTTPException
 
 from app.core import config, languages, messages
 from app.llm import ollama
-from app.models.schemas import SettingsUpdate
+from app.models.schemas import BrowserCookieRequest, SettingsUpdate
+from app.transcript import browser_cookies
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -23,6 +24,7 @@ _KEY_FIELDS = (
     ("groq_api_key", "GROQ_API_KEY"),
     ("mistral_api_key", "MISTRAL_API_KEY"),
     ("together_api_key", "TOGETHER_API_KEY"),
+    ("ollama_cloud_api_key", "OLLAMA_CLOUD_API_KEY"),
 )
 
 
@@ -65,7 +67,38 @@ def _public_state() -> dict:
                                     if name == "gemini" and len(g_keys) > 1 else _mask(raw))
     # 回傳金鑰是否已設定（不代表驗證通過）；無金鑰仍可使用本機 Ollama。
     state["configured"] = any(state[f"{f.removesuffix('_api_key')}_set"] for f, _ in _KEY_FIELDS)
+    # B 站 cookie 不是 AI 金鑰：有自己的欄位，也不影響上面的 `configured`。
+    sessdata = config.get("BILIBILI_SESSDATA")
+    state["bilibili_sessdata_set"] = bool(sessdata)
+    state["bilibili_sessdata_preview"] = _mask(sessdata)
     return state
+
+
+@router.get("/bilibili-browsers")
+def get_bilibili_browsers() -> dict:
+    """列出這台機器上讀得到／讀不到 B 站登入狀態的瀏覽器。"""
+    return {"browsers": browser_cookies.probe()}
+
+
+@router.post("/bilibili-cookie")
+def import_bilibili_cookie(req: BrowserCookieRequest) -> dict:
+    """從使用者自己的瀏覽器讀出 SESSDATA 並存到本機設定（不代替使用者登入）。"""
+    name = browser_cookies.label(req.browser)
+    try:
+        value = browser_cookies.read_sessdata(req.browser)
+    except ValueError as exc:
+        code = str(exc)
+        key = {
+            "missing": "settings.cookie_missing",
+            "locked": "settings.cookie_locked",
+            "no_session": "settings.cookie_no_session",
+        }.get(code, "settings.cookie_error")
+        raise HTTPException(400, messages.t(key, browser=name, error=code)) from exc
+    if (len(value) > 512 or any(ord(ch) < 32 for ch in value)
+            or ";" in value or "," in value):
+        raise HTTPException(400, messages.t("settings.bilibili_sessdata_invalid"))
+    config.save({"BILIBILI_SESSDATA": value})
+    return _public_state()
 
 
 @router.get("")
@@ -99,6 +132,13 @@ def update_settings(req: SettingsUpdate) -> dict:
     if req.output_language is not None:
         # 不認得的語言代碼一律回退預設，避免前端送錯值就讓 prompt 壞掉
         updates["OUTPUT_LANGUAGE"] = languages.get(req.output_language).code
+    if req.bilibili_sessdata is not None:
+        # 只留 cookie 值本身；換行／分號／逗號都視為貼錯（整段 Cookie 標頭會被拒絕）
+        value = req.bilibili_sessdata.strip()
+        if (len(value) > 512 or any(ord(ch) < 32 for ch in value)
+                or ";" in value or "," in value):
+            raise HTTPException(400, messages.t("settings.bilibili_sessdata_invalid"))
+        updates["BILIBILI_SESSDATA"] = value
     if req.ui_language is not None:
         # 介面語言只有兩種；認不出來就當繁中，config 那層也會再擋一次
         updates["UI_LANGUAGE"] = req.ui_language if req.ui_language in ("zh-Hant", "en") else "zh-Hant"

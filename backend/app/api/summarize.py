@@ -20,7 +20,8 @@ from app.llm.util import user_error
 from app.models.schemas import DeepDiveRequest, SummarizeRequest
 from app.prompts.summarize import (deepdive_prompt, deepdive_system,
                                    summarize_prompt, summarize_system,
-                                   budget_summarize_prompt, budget_summarize_system)
+                                   budget_summarize_prompt, budget_summarize_system,
+                                   overview_prompt, overview_system)
 from app.services.chunker import MAX_CHUNKS, chunk_content
 from app.transcript.router import Content, route_content
 
@@ -229,6 +230,46 @@ def _audit_coverage(req: SummarizeRequest, content: Content, chunk: str,
     return data, "、".join(labels)
 
 
+
+def _fallback_card(text: str, language: str) -> dict:
+    """模型沒有給出任何卡片時，至少把逐字稿本身整理成一張卡。
+
+    短片（例如 1 分鐘的示範）常常被模型判定「沒有可整理的內容」而回空陣列；
+    使用者要的是「看得到東西」，而不是一個空白畫面或錯誤。這張卡只做抽取式摘要，
+    不冒充 AI 分析，標題會寫明是自動整理。
+    """
+    lines = [line.strip() for line in (text or "").splitlines() if line.strip()]
+    picked = lines[:12]
+    body = chr(10).join(picked)[:1500]
+    return {"heading": messages.t("summarize.fallback_heading"),
+            "summary": body,
+            "transcript_highlight": picked[0][:200] if picked else "",
+            "actionable": False,
+            "fallback": True}
+
+
+def _build_overview(cards: list[dict], title: str | None, language: str, provider: str | None) -> dict:
+    """把一堆卡片收斂成一段整體總結（模型失敗時退回卡片標題，至少不是空的）。"""
+    if not cards:
+        return {"summary": "", "points": []}
+    fallback = {"summary": "",
+                "points": [str(c.get("heading") or "").strip() for c in cards[:6] if c.get("heading")]}
+    try:
+        raw, _model = llm_router.generate(provider, overview_prompt(cards, title, language),
+                                          overview_system(language), seg=len(cards) + 1)
+        data = json.loads(repair_json(raw)) if raw else None
+    except Exception as exc:  # noqa: BLE001
+        print(f"[summarize] 總結失敗：{exc}", flush=True)
+        return fallback
+    if not isinstance(data, dict):
+        return fallback
+    summary = str(data.get("summary") or "").strip()
+    points = [str(point).strip() for point in (data.get("points") or [])
+              if str(point).strip()][:6]
+    if not summary and not points:
+        return fallback
+    return {"summary": summary, "points": points}
+
 def _run_segment(req: SummarizeRequest, content: Content, chunk: str,
                  index: int, multi: bool,
                  on_status: Callable[[dict[str, Any]], None] | None = None) -> Tuple[dict, str]:
@@ -292,9 +333,13 @@ def summarize(req: SummarizeRequest) -> dict:
             models_used.append(model_used)
 
     if not all_cards:
-        raise HTTPException(500, messages.t("summarize.all_segments_failed"))
+        if (content.get("text") or "").strip():
+            all_cards = [_fallback_card(content["text"], config.get("OUTPUT_LANGUAGE"))]
+        else:
+            raise HTTPException(500, messages.t("summarize.all_segments_failed"))
 
     return {"title": title or messages.t("summarize.untitled"),
+            "overview": _build_overview(all_cards, title, config.get("OUTPUT_LANGUAGE"), req.provider),
             "source_type": content["type"],
             "source_url": req.url, "youtube_video_id": content.get("video_id") if content["type"] == "youtube" else None,
             "bilibili_video_id": content.get("video_id") if content["type"] == "bilibili" else None,
@@ -372,6 +417,7 @@ def _stream_events(req: SummarizeRequest) -> Iterator[str]:
         models_used: list[str] = []
         content_types: list[str] = []   # 依段落順序 append（emit 是嚴格時間序），供多數決
         failed = total = 0
+        collected: list[dict] = []
         status_events = [Queue() for _ in chunks]
         fatal_error: str | None = None
 
@@ -410,6 +456,7 @@ def _stream_events(req: SummarizeRequest) -> Iterator[str]:
                 yield line({"type": "title", "title": title})
             cards = data.get("cards", [])
             total += len(cards)
+            collected.extend(cards)
             if model_used and model_used not in models_used:
                 models_used.append(model_used)
             ctype = data.get("content_type") or "other"
@@ -440,6 +487,17 @@ def _stream_events(req: SummarizeRequest) -> Iterator[str]:
             # 取消還在排隊的段落，不再呼叫模型；已經在跑的那段無法中斷，會在背景做完。
             # 不等待（wait=False），以免關閉 generator 時卡住伺服器。
             ex.shutdown(wait=False, cancel_futures=True)
+        if total == 0 and (content.get("text") or "").strip():
+            # 模型整段都沒給卡片（短片最常見）：補一張抽取式摘要，讓畫面有內容
+            fallback = _fallback_card(content["text"], config.get("OUTPUT_LANGUAGE"))
+            total += 1
+            collected.append(fallback)
+            yield line({"type": "cards", "seg": len(chunks), "cards": [fallback],
+                        "model": messages.t("summarize.fallback_model"), "content_type": "other"})
+        if collected:
+            # 前端在 done 之後會把 overview 放在卡片上方；模型失敗時退回卡片標題
+            yield line({"type": "overview", **_build_overview(
+                collected, title, config.get("OUTPUT_LANGUAGE"), req.provider)})
         yield line({"type": "done", "title": title or messages.t("summarize.untitled"),
                     "model_used": "、".join(models_used), "segments": len(chunks),
                     "content_type": _pick_content_type(content_types),

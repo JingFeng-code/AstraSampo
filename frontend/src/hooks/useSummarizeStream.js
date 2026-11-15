@@ -21,7 +21,7 @@ export default function useSummarizeStream({ initialResult = null, onSegError, o
     controllerRef.current = controller
     setStopped(false)
     setLoading(true); setError(''); setCoverage(null); setResult(null); setProgress({ stage: 'source', completed: 0, total: 0, startedAt })
-    const draft = { title: '', source_type: '', source_url: u, youtube_video_id: null, bilibili_video_id: null, bilibili_page: null, local_video_id: null, local_name: localName, cards: [], model_used: '', segments: 0, transcript_source: null, content_type: 'other' }
+    const draft = { title: '', source_type: '', source_url: u, youtube_video_id: null, bilibili_video_id: null, bilibili_page: null, local_video_id: null, local_name: localName, cards: [], model_used: '', segments: 0, transcript_source: null, content_type: 'other', overview: null }
     let segsDone = 0
     let firstSegmentError = ''
     try {
@@ -57,6 +57,9 @@ export default function useSummarizeStream({ initialResult = null, onSegError, o
           segsDone++; setProgress(p => ({ ...p, stage: 'generate', state: 'next', completed: segsDone, total: draft.segments, startedAt })); onSegError?.(ev)
         } else if (ev.type === 'fatal') {
           throw new Error(ev.error)
+        } else if (ev.type === 'overview') {
+          draft.overview = { summary: ev.summary || '', points: ev.points || [] }
+          setResult({ ...draft })
         } else if (ev.type === 'done') {
           draft.title = draft.title || ev.title; draft.model_used = ev.model_used || draft.model_used
           draft.content_type = ev.content_type || draft.content_type

@@ -12,10 +12,11 @@ export default function useCards(result, provider, initial = {}) {
   const [clips, setClips] = useState(initial.clips || [])
   const clippedIds = new Set(clips.map(c => c.cardIndex))
 
+  // play=false 時只跳到該秒數、不自動播放（切換卡片時的行為）
   function jumpToCard(i, play = false) {
     setIndexRaw(i)
     const t = cards[i]?.timestamp_seconds
-    if (play && t != null) setStartAt(s => ({ t: Math.floor(t), auto: true, key: s.key + 1 }))
+    if (t != null) setStartAt(s => ({ t: Math.floor(t), auto: !!play, key: s.key + 1 }))
   }
 
   function clipCard(i) {
@@ -53,7 +54,7 @@ export default function useCards(result, provider, initial = {}) {
   }
 
   return {
-    index, setIndex: i => jumpToCard(i, true), jumpToCard, startAt,
+    index, setIndex: i => jumpToCard(i, false), jumpToCard, startAt,
     clips, setClips, clippedIds, clipCard, removeClip, updateClipNote,
     deepdives, ddLoading, handleDeepDive, resetForNewResult,
   }
