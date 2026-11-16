@@ -108,11 +108,11 @@ def test_missing_public_subtitle():
             assert "需要登入" in str(exc)
 
 
-def test_sessdata_is_sent_and_ai_subtitles_are_labelled():
+def test_sessdata_is_sent_to_api_only_and_ai_subtitles_are_labelled():
     seen = []
 
     def fake_get(url, **kwargs):
-        seen.append(kwargs.get("headers", {}).get("Cookie"))
+        seen.append((url, kwargs.get("headers", {}).get("Cookie")))
         if url.endswith("/x/web-interface/view"):
             return FakeResponse({"code": 0, "data": {"pages": [{"cid": 123}]}})
         if url.endswith("/x/player/v2"):
@@ -124,12 +124,16 @@ def test_sessdata_is_sent_and_ai_subtitles_are_labelled():
     with patch.object(bilibili.requests, "get", side_effect=fake_get),          patch.object(bilibili.cache, "get_obj", return_value=None),          patch.object(bilibili.cache, "put_obj"):
         text, is_chinese, lang, is_ai = bilibili.fetch_transcript_detail(BVID, 1, "abc123")
     assert text == "[2] 自動字幕" and is_chinese and is_ai and lang == "ai-zh"
-    assert seen and all(c == "SESSDATA=abc123" for c in seen), seen
+    # 登入狀態只給 api.bilibili.com；字幕 CDN 是另一個網域，不該拿到 SESSDATA
+    api_cookies = [c for u, c in seen if u.startswith("https://api.bilibili.com/")]
+    cdn_cookies = [c for u, c in seen if u.startswith("https://aisubtitle.hdslb.com/")]
+    assert api_cookies and all(c == "SESSDATA=abc123" for c in api_cookies), seen
+    assert cdn_cookies and all(c is None for c in cdn_cookies), seen
 
     seen.clear()
     with patch.object(bilibili.requests, "get", side_effect=fake_get),          patch.object(bilibili.cache, "get_obj", return_value=None),          patch.object(bilibili.cache, "put_obj"):
         bilibili.fetch_transcript_detail(BVID, 1)
-    assert all(c is None for c in seen), "沒有 SESSDATA 時不該送出 Cookie"
+    assert all(c is None for _u, c in seen), "沒有 SESSDATA 時不該送出 Cookie"
 
 
 def test_bad_sessdata_is_rejected():
@@ -208,7 +212,7 @@ if __name__ == "__main__":
     test_fetch_public_subtitle_and_cache()
     test_cached_transcript_from_another_video_is_ignored()
     test_missing_public_subtitle()
-    test_sessdata_is_sent_and_ai_subtitles_are_labelled()
+    test_sessdata_is_sent_to_api_only_and_ai_subtitles_are_labelled()
     test_bad_sessdata_is_rejected()
     test_router_falls_back_to_local_transcription()
     test_router_keeps_both_reasons_when_transcription_is_unavailable()

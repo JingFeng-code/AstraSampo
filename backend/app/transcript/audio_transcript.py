@@ -73,10 +73,12 @@ def _whisper(path: str) -> Optional[tuple[str, bool]]:
 
 def transcribe(url: str, cache_key: Optional[str] = None) -> tuple[str, bool, str]:
     """回傳 (帶時間戳逐字稿, 是否中文, 實際使用的引擎)。同一支影片第二次直接命中快取。"""
-    key = f"asr_v1:{cache_key or url}"
-    hit = cache.get(key)
-    if hit is not None:
-        return hit
+    # asr_v2：舊版只存 text／is_chinese，讀回來會少一個引擎欄位，呼叫端解三個值
+    # 就 unpack 失敗。換版本前綴讓那些舊檔自然失效，不必猜引擎是哪一個。
+    key = f"asr_v2:{cache_key or url}"
+    hit = cache.get_obj(key)
+    if isinstance(hit, dict) and isinstance(hit.get("text"), str):
+        return hit["text"], bool(hit.get("is_chinese", False)), str(hit.get("engine") or "cache")
 
     tmpdir = tempfile.mkdtemp(prefix="astratube_audio_")
     try:
@@ -92,5 +94,5 @@ def transcribe(url: str, cache_key: Optional[str] = None) -> tuple[str, bool, st
 
     if result is None:
         raise ValueError(messages.t("whisper.engine_missing"))
-    cache.put(key, result[0], result[1])
+    cache.put_obj(key, {"text": result[0], "is_chinese": result[1], "engine": result[2]})
     return result

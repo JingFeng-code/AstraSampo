@@ -111,11 +111,14 @@ def _subtitle_url(url: str) -> str:
     return full
 
 
-def _load_subtitle(url: str, referer: str, cookie: dict[str, str] | None = None) -> list[dict]:
+def _load_subtitle(url: str, referer: str) -> list[dict]:
+    """讀字幕檔。這裡刻意不帶 Cookie：SESSDATA 只該送給 api.bilibili.com。"""
     endpoint = _subtitle_url(url)
     try:
         # 拒絕重導向，以免字幕 CDN 被利用去請求任意內網位置。
-        response = requests.get(endpoint, headers={**_HEADERS, "Referer": referer, **(cookie or {})},
+        # Cookie 也不轉送：字幕 CDN（*.hdslb.com）不需要登入憑證，帶著只是把
+        # 使用者的登入狀態送給另一個網域。
+        response = requests.get(endpoint, headers={**_HEADERS, "Referer": referer},
                                 timeout=20, allow_redirects=False)
         response.raise_for_status()
         if response.status_code in (301, 302, 303, 307, 308):
@@ -182,7 +185,7 @@ def fetch_transcript_detail(bvid: str, page: int = 1,
     if not subtitle:
         raise ValueError("Bilibili 字幕列表無有效項目。")
     chosen = subtitle[0]
-    rows = _load_subtitle(chosen.get("subtitle_url"), referer, cookie)
+    rows = _load_subtitle(chosen.get("subtitle_url"), referer)
     lines = []
     for entry in rows:
         if not isinstance(entry, dict):

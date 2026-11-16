@@ -176,6 +176,28 @@ def test_model_list_still_rejects_unrecognized_shapes():
             assert exc.status_code == 502
 
 
+def test_models_endpoint_reports_ollama_cloud_configured_state():
+    """存了 Ollama Cloud 金鑰，/models 就必須回報 configured。
+
+    沒回報的話前端只會看到「未設定」，使用者按「開始」就被踢回設定頁。
+    """
+    from app.api import models as api_models
+
+    def providers(configured: bool):
+        with patch.object(api_models.ollama_cloud, "is_configured", return_value=configured), \
+             patch.object(api_models.ollama, "connection_status",
+                          return_value={"connected": False, "models": [], "message": ""}):
+            return api_models.list_models()["providers"]
+
+    configured = providers(True)
+    cloud = configured.get("ollama-cloud")
+    assert cloud is not None, sorted(configured)
+    assert cloud["configured"] is True, cloud
+    # 模型清單仍要等 POST /providers/check 驗證過才出現
+    assert cloud["models"] == [], cloud
+    assert providers(False)["ollama-cloud"]["configured"] is False
+
+
 if __name__ == "__main__":
     test_model_list_accepts_bare_array_and_data_envelope()
     test_model_list_still_rejects_unrecognized_shapes()
@@ -188,4 +210,5 @@ if __name__ == "__main__":
     test_new_cloud_providers_support_verification_generation_and_subtitles()
     test_openrouter_verifies_key_before_public_model_list()
     test_model_list_filters_non_chat_entries_and_no_free_provider_advertised()
+    test_models_endpoint_reports_ollama_cloud_configured_state()
     print("AI provider connection tests passed")

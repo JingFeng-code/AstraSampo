@@ -59,6 +59,10 @@ jobs:
           python tests/test_local_speech.py
           python tests/test_watch_along.py
           python tests/test_subtitle_translation.py
+          python tests/test_browser_cookies.py
+          python tests/test_ollama_cloud.py
+          python tests/test_summarize_fallback.py
+          python tests/test_watch_visual_only.py
 
   frontend:
     name: Frontend build

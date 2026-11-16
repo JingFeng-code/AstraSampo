@@ -37,8 +37,22 @@ def _headers(key: str | None = None) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
+def _verify_key(key: str) -> None:
+    """用需要授權的端點確認這把金鑰真的有效。
+
+    `/api/tags` 是公開端點：不帶金鑰或隨便一把無效金鑰都會回 200，所以拿它當
+    「檢查連線」等於沒有檢查。`POST /api/me` 對無效金鑰回 401 invalid credentials。
+    """
+    with httpx.Client(timeout=httpx.Timeout(8.0), trust_env=False, follow_redirects=False) as client:
+        response = client.post(BASE_URL + "/api/me", headers=_headers(key))
+        if response.status_code in (401, 403):
+            raise ProviderError(messages.t("provider.ollama_cloud_bad_key"))
+        response.raise_for_status()
+
+
 def list_models(key: str | None = None) -> list[str]:
     """列出這把金鑰真的看得到的雲端模型；格式與本機 /api/tags 相同。"""
+    _verify_key(key)
     with httpx.Client(timeout=httpx.Timeout(8.0), trust_env=False, follow_redirects=False) as client:
         response = client.get(BASE_URL + "/api/tags", headers=_headers(key))
         if response.status_code == 401:
