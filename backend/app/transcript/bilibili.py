@@ -172,7 +172,7 @@ def fetch_transcript_detail(bvid: str, page: int = 1,
             raise ValueError("這支 Bilibili 影片的字幕需要登入才能讀取。在設定頁貼上你自己的 "
                              "SESSDATA 後可以讀取，AstraTube 不會代替你登入。"
                              "如果你有這支影片可使用的字幕檔，也可以匯入 SRT／VTT 後再分析。")
-        raise ValueError("這支 Bilibili 影片沒有可公開取得的字幕，AstraTube 不會下載影音來轉錄。"
+        raise ValueError("這支 Bilibili 影片沒有可公開取得的字幕。"
                          "如果你有這支影片可使用的字幕檔，可以匯入 SRT／VTT 後再分析。")
 
     def rank(item: dict) -> tuple:
