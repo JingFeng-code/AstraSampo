@@ -44,6 +44,10 @@ MESSAGES: dict[str, dict[str, str]] = {
         "zh-Hant": "讀取 {browser} 的 cookie 時發生錯誤：{error}",
         "en": "Reading cookies from {browser} failed: {error}",
     },
+    "settings.local_only": {
+        "zh-Hant": "讀取瀏覽器登入狀態只能在這台電腦上執行；遠端環境（例如 Codespaces）不會讀取你的 cookie。",
+        "en": "Reading browser sessions only works on this computer. Remote environments such as Codespaces will not read your cookies.",
+    },
     "settings.bilibili_sessdata_invalid": {
         "zh-Hant": "SESSDATA 格式不正確：不可含換行、分號或逗號，最長 512 字元。",
         "en": "Invalid SESSDATA: no line breaks, semicolons or commas, and at most 512 characters.",

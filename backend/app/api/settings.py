@@ -2,8 +2,9 @@
 import re
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
+from app.api.local_video import on_this_computer
 from app.core import config, languages, messages
 from app.llm import ollama
 from app.models.schemas import BrowserCookieRequest, SettingsUpdate
@@ -74,15 +75,24 @@ def _public_state() -> dict:
     return state
 
 
+def _require_this_computer(request: Request) -> None:
+    """讀取瀏覽器 cookie 只在這台電腦上有意義；遠端請求一律拒絕。"""
+    client = request.client.host if request.client else None
+    if not on_this_computer(client, request.headers.get("origin")):
+        raise HTTPException(403, messages.t("settings.local_only"))
+
+
 @router.get("/bilibili-browsers")
-def get_bilibili_browsers() -> dict:
+def get_bilibili_browsers(request: Request) -> dict:
     """列出這台機器上讀得到／讀不到 B 站登入狀態的瀏覽器。"""
+    _require_this_computer(request)
     return {"browsers": browser_cookies.probe()}
 
 
 @router.post("/bilibili-cookie")
-def import_bilibili_cookie(req: BrowserCookieRequest) -> dict:
+def import_bilibili_cookie(req: BrowserCookieRequest, request: Request) -> dict:
     """從使用者自己的瀏覽器讀出 SESSDATA 並存到本機設定（不代替使用者登入）。"""
+    _require_this_computer(request)
     name = browser_cookies.label(req.browser)
     try:
         value = browser_cookies.read_sessdata(req.browser)
