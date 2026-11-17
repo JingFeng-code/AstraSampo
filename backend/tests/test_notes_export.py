@@ -201,6 +201,24 @@ def test_export_gives_up_after_too_many_duplicates():
         assert sorted(p.name for p in folder.iterdir()) == ["同名 (2).md", "同名.md"], "失敗時不得留下新檔"
 
 
+def test_windows_reserved_names_get_an_underscore():
+    # 純字串檢查：CI 在 Linux，不能只驗 POSIX 行為
+    for name, expected in [("con", "_con"), ("NUL", "_NUL"), ("com1", "_com1"),
+                           ("LPT9", "_LPT9"), ("Con", "_Con"), ("con.backup", "_con.backup")]:
+        assert notes._export_name(name) == expected, name
+    for name in ["console", "connect", "com10", "lpt10", "mycon"]:
+        assert notes._export_name(name) == name, name
+
+    with TemporaryDirectory() as tmp, patch.dict(os.environ, CLEAN_ENV):
+        base = Path(tmp)
+        with make_roots(base):
+            res = post_export(client(), "con", "內容")
+        assert res.status_code == 200, res.text
+        path = Path(res.json()["saved_to"])
+        assert path.name == "_con.md", path.name
+        assert path.parent == base / "Downloads" / "AstraTube"
+
+
 if __name__ == "__main__":
     test_normal_export_writes_utf8_file_in_downloads()
     test_same_name_does_not_overwrite()
@@ -208,6 +226,7 @@ if __name__ == "__main__":
     test_downloads_folder_uses_windows_known_folder_when_available()
     test_concurrent_same_name_exports_keep_both_files()
     test_export_gives_up_after_too_many_duplicates()
+    test_windows_reserved_names_get_an_underscore()
     test_oversized_markdown_is_rejected()
     test_only_requests_from_this_computer_are_accepted()
     test_unwritable_downloads_falls_back_to_program_folder()

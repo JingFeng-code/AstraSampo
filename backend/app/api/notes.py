@@ -113,6 +113,15 @@ def _exports_root() -> Path:
 # 控制字元（含 NUL、換行、Tab）會讓部分平台的開檔直接失敗；它們不是檔名的一部分
 _CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
 
+# Windows 的裝置名稱（不分大小寫，帶副檔名也算）。CI 跑在 Linux 驗不到，
+# 但寫進使用者的 Windows 電腦時這些名字不是普通檔案，所以一律加底線。
+_WINDOWS_RESERVED = frozenset(
+    ["con", "prn", "aux", "nul"]
+    + [f"com{i}" for i in range(1, 10)]
+    + [f"lpt{i}" for i in range(1, 10)]
+)
+
+
 def _export_name(name: str) -> str:
     """匯出檔名：只取名稱本身（不含路徑與副檔名），長度留給「 (2)」這種後綴。"""
     base = _safe_name(_CONTROL_CHARS.sub("", name or "").replace(os.sep, " ").replace("/", " "))
@@ -120,7 +129,11 @@ def _export_name(name: str) -> str:
         base = base[:-3]
     # Windows 不接受結尾的點與空白，清掉以免寫檔直接失敗
     base = base.strip().rstrip(". ")
-    return base[:110] or "AstraTube-notes"
+    base = base[:110] or "AstraTube-notes"
+    # "CON"、"LPT1"、"con.backup" 在 Windows 上是裝置名稱，不是檔名
+    if base.split(".")[0].strip().lower() in _WINDOWS_RESERVED:
+        base = "_" + base
+    return base
 
 
 # 同名上限：正常情況不會撞這麼多；上限只是避免無限重試
