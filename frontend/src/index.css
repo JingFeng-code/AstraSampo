@@ -239,7 +239,9 @@ button:disabled{cursor:not-allowed}
 .notes{display:flex;flex-direction:column;gap:12px}
 .float-window-body .notes{position:static;max-height:none}
 .notes-head{display:flex;align-items:center;gap:8px}.notes-head h3{margin:0;font-size:14px}.notes-head .count{margin-left:auto;color:var(--text-faint);font:600 12px/1 var(--mono)}
-.clip-list{display:flex;flex-direction:column;gap:8px;min-height:40px;overflow-y:auto}
+.clip-list{display:flex;flex-direction:column;gap:8px;min-height:40px;overflow-y:auto;max-height:min(38vh,340px)}
+/* 動作列固定在面板底部：31 則筆記時也不用捲過整份清單才按得到下載 */
+.notes-actions{position:sticky;bottom:0;z-index:2;display:flex;flex-direction:column;gap:10px;padding:10px 0 2px;background:var(--surface);border-top:1px solid var(--border)}
 .clip-item{padding:10px;border-left:3px solid var(--accent);border-radius:0 var(--radius-control) var(--radius-control) 0;background:var(--surface-2);font-size:13px}
 .clip-head{display:flex;align-items:baseline;gap:7px}.clip-head strong{flex:1;color:var(--text);font-weight:700;line-height:1.45}.clip-item .ts{color:var(--accent);font:650 12px/1 var(--mono)}
 .clip-item .rm{border:0;background:transparent;color:var(--text-faint);font-size:16px;line-height:1}.clip-item .rm:hover{color:var(--danger)}

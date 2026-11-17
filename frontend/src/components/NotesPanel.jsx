@@ -58,22 +58,25 @@ export default function NotesPanel({ vault, clips, cardCount = 0, onClipNoteChan
         </div>
       )}
 
-      {vault.configured&&<button className={primary} onClick={onSave} disabled={!canSave}>{saving?t('notes.saving'):isAppend?t('notes.append'):t('notes.save')}</button>}
-      <button className={vault.configured?secondary:primary} onClick={onExport} disabled={!hasContent}>{t('notes.downloadMarkdown')}</button>
-      {/* 不必先收進筆記：直接匯出「總結＋全部卡片＋隨手筆記」 */}
-      <button className={secondary} onClick={onExportAll} disabled={!(cardCount>0||hasContent)}>{t('notes.exportAll')}</button>
-      {/* 存檔失敗（例如「下載」資料夾不能寫）時的退路：至少能把 Markdown 複製走 */}
-      <button className={secondary} onClick={onCopy} disabled={!hasContent}>{t('notes.copyMarkdown')}</button>
-      {confirmClear?
-        <span className="notes-clear-confirm" role="alert">
-          {t('notes.clearConfirm')}
-          <button type="button" className="btn-paper danger" onClick={()=>{setConfirmClear(false);onClear()}}>{t('notes.clearYes')}</button>
-          <button type="button" className="btn-paper" onClick={()=>setConfirmClear(false)}>{t('notes.clearNo')}</button>
-        </span>:
-        <button type="button" className={secondary} onClick={()=>setConfirmClear(true)} disabled={!hasContent}>{t('notes.clear')}</button>}
-      {/* 存檔成功後留在畫面上，文字可選取；下次存檔或收合面板才清掉 */}
-      {lastSaved&&<p className="notes-last-saved"><span className="cfg-label">{t('notes.lastSaved')}</span><span className="path">{lastSaved}</span></p>}
-      {vault.configured&&<p className="save-hint"><span className={`vault-chip ${vs.cls}`} style={{marginLeft:0}}><span className="dot"/> {vs.text}</span><br/>{vault.configured?`vault：${vault.path?.replace(/[/\\][^/\\]*$/,'')||vault.path}`:t('notes.vaultHint')}</p>}
+      {/* 動作列黏在面板底部：收了 31 則之後不必捲過整份清單才找得到下載與清空 */}
+      <div className="notes-actions">
+        {vault.configured&&<button className={primary} onClick={onSave} disabled={!canSave}>{saving?t('notes.saving'):isAppend?t('notes.append'):t('notes.save')}</button>}
+        <button className={vault.configured?secondary:primary} onClick={onExport} disabled={!hasContent}>{t('notes.downloadMarkdown')}</button>
+        {/* 不必先收進筆記：直接匯出「總結＋全部卡片＋隨手筆記」 */}
+        <button className={secondary} onClick={onExportAll} disabled={!(cardCount>0||hasContent)}>{t('notes.exportAll')}</button>
+        {/* 存檔失敗（例如「下載」資料夾不能寫）時的退路：至少能把 Markdown 複製走 */}
+        <button className={secondary} onClick={onCopy} disabled={!hasContent}>{t('notes.copyMarkdown')}</button>
+        {confirmClear?
+          <span className="notes-clear-confirm" role="alert">
+            {t('notes.clearConfirm')}
+            <button type="button" className="btn-paper danger" onClick={()=>{setConfirmClear(false);onClear()}}>{t('notes.clearYes')}</button>
+            <button type="button" className="btn-paper" onClick={()=>setConfirmClear(false)}>{t('notes.clearNo')}</button>
+          </span>:
+          <button type="button" className={secondary} onClick={()=>setConfirmClear(true)} disabled={!hasContent}>{t('notes.clear')}</button>}
+        {/* 存檔成功後留在畫面上，文字可選取；下次存檔或收合面板才清掉 */}
+        {lastSaved&&<p className="notes-last-saved"><span className="cfg-label">{t('notes.lastSaved')}</span><span className="path">{lastSaved}</span></p>}
+        {vault.configured&&<p className="save-hint"><span className={`vault-chip ${vs.cls}`} style={{marginLeft:0}}><span className="dot"/> {vs.text}</span><br/>{vault.configured?`vault：${vault.path?.replace(/[/\\][^/\\]*$/,'')||vault.path}`:t('notes.vaultHint')}</p>}
+      </div>
     </aside>
   )
 }

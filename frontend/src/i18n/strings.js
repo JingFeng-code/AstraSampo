@@ -416,8 +416,8 @@ export const STRINGS = {
     'error.noCards': 'Extraction failed: no cards were produced. Try again or switch models.',
     'error.pickNote': 'Choose a note to append to first',
 
-    'notes.downloadMarkdown': 'Download Markdown notes',
-    'notes.exportAll': 'Download all key points',
+    'notes.downloadMarkdown': 'Download saved notes',
+    'notes.exportAll': 'Download summary + all key points',
     'notes.clipAll': 'Add all key points to notes',
     'notes.clear': 'Clear notes',
     'notes.clearConfirm': 'Clear? Saved key points and scratch notes will be removed.',
@@ -850,8 +850,8 @@ export const STRINGS = {
     'error.noCards': '整理失敗：沒有產生任何重點，請稍後再試或更換模型。',
     'error.pickNote': '請先選擇要附加的筆記',
 
-    'notes.downloadMarkdown': '下載 Markdown 筆記',
-    'notes.exportAll': '下載全部重點',
+    'notes.downloadMarkdown': '下載已收的筆記',
+    'notes.exportAll': '下載總結＋全部重點',
     'notes.clipAll': '全部重點收進筆記',
     'notes.clear': '清空筆記',
     'notes.clearConfirm': '確定清空？已收的重點與隨手筆記都會移除。',

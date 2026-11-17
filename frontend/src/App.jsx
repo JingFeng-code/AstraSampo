@@ -189,7 +189,9 @@ export default function App() {
   }
   // 不必先收進筆記：總結＋全部卡片（依時間排序）＋隨手筆記一次匯出
   function handleExportAllNotes(){
-    saveNotesMarkdown(createNoteMarkdown({title:noteTitle(),sourceUrl:noteSource,clips:cardsHook.allClips(),freeNote,overview:result?.overview}))
+    // 已收的卡片帶上筆記裡那一份，才不會把使用者寫的註記丟掉
+    const clips=mergeForExport(cardsHook.clips,cardsHook.allClips())
+    saveNotesMarkdown(createNoteMarkdown({title:noteTitle(),sourceUrl:noteSource,clips,freeNote,overview:result?.overview}))
   }
   function handleClipAll(){
     const added=cardsHook.clipAll()

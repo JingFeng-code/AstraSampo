@@ -22,6 +22,13 @@ export function mergeClips(existing = [], incoming = []) {
   return next
 }
 
+// 匯出「總結＋全部重點」時，已收進筆記的卡片要用筆記裡那一份：
+// 使用者寫的註記（以及之後可能新增的欄位）都只在筆記那份裡，重建會全部丟掉。
+export function mergeForExport(existing = [], built = []) {
+  const byCard = new Map(existing.map(clip => [clip.cardIndex, clip]))
+  return built.map(clip => byCard.get(clip.cardIndex) || clip)
+}
+
 // 匯出時照影片時間排；沒有時間的排最後，並維持原本的相對順序
 export function sortClipsByTime(clips = []) {
   const time = clip => {
