@@ -38,6 +38,8 @@ export default function SettingsModal({ state, mandatory, focus, onClose, onSave
   const checkVersion = useRef(0)
   const [visualKey, setVisualKey] = useState('')
   const [sessdata, setSessdata] = useState('')
+  // 清除 SESSDATA 是明確動作：一般儲存時欄位空白代表「不變」
+  const [removingSessdata, setRemovingSessdata] = useState(false)
   const [browsers, setBrowsers] = useState([])
   const [browser, setBrowser] = useState('')
   const [cookieMsg, setCookieMsg] = useState('')
@@ -161,6 +163,22 @@ export default function SettingsModal({ state, mandatory, focus, onClose, onSave
       setCookieErr(e.message)
     } finally {
       setCookieBusy(false)
+    }
+  }
+
+  async function removeSessdata() {
+    if (removingSessdata) return
+    setRemovingSessdata(true); setCookieErr(''); setCookieMsg('')
+    try {
+      // 明確送空字串：後端只有收到空字串才會清掉，欄位空白不會
+      const next = await api.saveSettings({ bilibili_sessdata: '' })
+      setSessdata('')
+      setCookieMsg(t('settings.bilibiliRemoveDone'))
+      onSaved?.(next)
+    } catch (e) {
+      setCookieErr(t('settings.bilibiliRemoveFailed', e.message))
+    } finally {
+      setRemovingSessdata(false)
     }
   }
 
@@ -329,6 +347,11 @@ export default function SettingsModal({ state, mandatory, focus, onClose, onSave
                 value={sessdata} onChange={e=>setSessdata(e.target.value)}
                 placeholder={state?.bilibili_sessdata_set ? t('settings.keySet', state?.bilibili_sessdata_preview || '••••') : t('settings.bilibiliSessdataPlaceholder')} />
               <span className="settings-hint">{t('settings.bilibiliSessdataHint')}</span>
+              {state?.bilibili_sessdata_set &&
+                <button type="button" className="settings-cancel" onClick={removeSessdata}
+                  disabled={removingSessdata}>
+                  {removingSessdata ? t('settings.bilibiliRemoving') : t('settings.bilibiliRemove')}
+                </button>}
             </label>
             <div className="settings-divider"><span>{t('settings.obsidian')}</span></div>
             <label className="settings-field">
