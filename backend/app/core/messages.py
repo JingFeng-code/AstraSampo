@@ -79,6 +79,22 @@ MESSAGES: dict[str, dict[str, str]] = {
         "zh-Hant": "筆記 %Y-%m-%d %H%M",
         "en": "Note %Y-%m-%d %H%M",
     },
+    "notes.export_local_only": {
+        "zh-Hant": "匯出的筆記只能存在這台電腦上；遠端環境（例如 Codespaces）不會幫你寫入檔案。",
+        "en": "Exported notes are only saved on this computer. Remote environments such as Codespaces will not write files for you.",
+    },
+    "notes.export_too_large": {
+        "zh-Hant": "筆記內容超過 2 MB，無法匯出。",
+        "en": "The note is larger than 2 MB and cannot be exported.",
+    },
+    "notes.export_failed": {
+        "zh-Hant": "無法寫入筆記檔：{error}",
+        "en": "Could not write the note file: {error}",
+    },
+    "notes.export_too_many": {
+        "zh-Hant": "同名的筆記檔太多，已停止匯出。請先整理「下載」資料夾裡的 AstraTube 筆記再試一次。",
+        "en": "Too many notes with the same name, so exporting stopped. Tidy up the AstraTube notes in your Downloads folder and try again.",
+    },
 
     # ── 問模型 ──────────────────────────────────────────────
     "ask.no_transcript": {
