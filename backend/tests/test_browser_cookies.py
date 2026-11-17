@@ -1,13 +1,25 @@
 """瀏覽器 cookie 讀取：不碰真實瀏覽器資料，全部用假的 cookie jar 驗證分類與訊息。"""
+import os
 import sys
 from pathlib import Path
 from unittest.mock import patch
 
+from fastapi.testclient import TestClient
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.api import settings as api_settings
-from app.models.schemas import BrowserCookieRequest
+from app.main import app
 from app.transcript import browser_cookies
+
+LOCAL = "http://127.0.0.1:8420"
+CLEAN_ENV = {"ASTRA_DESKTOP_TOKEN": "", "CODESPACE_NAME": "", "ASTRA_DESKTOP_DATA_DIR": "",
+             "ASTRA_ALLOWED_ORIGINS": "", "ASTRA_ALLOWED_HOSTS": ""}
+
+
+def local_client() -> TestClient:
+    """端點現在會檢查 request.client，測試要走真正的 HTTP 層（不能用假 request）。"""
+    return TestClient(app, base_url=LOCAL, client=("127.0.0.1", 50000))
 
 
 class FakeCookie:
@@ -72,24 +84,33 @@ def test_probe_reports_a_state_for_every_browser():
 
 def test_import_endpoint_saves_sessdata():
     saved = {}
-    with patch.object(browser_cookies, "_extract",
+    with patch.dict(os.environ, CLEAN_ENV), \
+         patch.object(browser_cookies, "_extract",
                       return_value=_jar(FakeCookie("SESSDATA", ".bilibili.com", "tok123"))), \
          patch.object(api_settings.config, "save", side_effect=lambda updates: saved.update(updates)), \
-         patch.object(api_settings.config, "get", return_value=""), \
          patch.object(api_settings, "_public_state", return_value={"ok": True}):
-        state = api_settings.import_bilibili_cookie(BrowserCookieRequest(browser="firefox"))
+        res = local_client().post("/settings/bilibili-cookie", json={"browser": "firefox"})
+    assert res.status_code == 200, res.text
     assert saved == {"BILIBILI_SESSDATA": "tok123"}
-    assert state == {"ok": True}
+    assert res.json() == {"ok": True}
 
 
 def test_import_endpoint_explains_locked_browser():
-    with patch.object(browser_cookies, "_extract", side_effect=RuntimeError("Failed to decrypt with DPAPI")):
-        try:
-            api_settings.import_bilibili_cookie(BrowserCookieRequest(browser="edge"))
-            assert False, "locked browser must fail with a readable message"
-        except Exception as exc:  # HTTPException
-            detail = str(getattr(exc, "detail", exc))
-            assert "加密" in detail or "App-Bound" in detail
+    with patch.dict(os.environ, CLEAN_ENV), \
+         patch.object(browser_cookies, "_extract", side_effect=RuntimeError("Failed to decrypt with DPAPI")):
+        res = local_client().post("/settings/bilibili-cookie", json={"browser": "edge"})
+    assert res.status_code == 400, res.text
+    detail = res.json()["detail"]
+    assert "加密" in detail or "App-Bound" in detail
+
+
+def test_import_endpoint_rejects_remote_requests():
+    with patch.dict(os.environ, CLEAN_ENV), \
+         patch.object(browser_cookies, "_extract") as extract:
+        remote = TestClient(app, base_url=LOCAL, client=("192.168.1.20", 50000))
+        assert remote.post("/settings/bilibili-cookie", json={"browser": "firefox"}).status_code == 403
+        assert remote.get("/settings/bilibili-browsers").status_code == 403
+    assert extract.call_count == 0
 
 
 if __name__ == "__main__":
@@ -99,4 +120,5 @@ if __name__ == "__main__":
     test_probe_reports_a_state_for_every_browser()
     test_import_endpoint_saves_sessdata()
     test_import_endpoint_explains_locked_browser()
+    test_import_endpoint_rejects_remote_requests()
     print("Browser cookie tests passed")

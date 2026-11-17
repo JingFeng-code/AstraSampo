@@ -45,6 +45,9 @@ export default function SettingsModal({ state, mandatory, focus, onClose, onSave
   const [cookieMsg, setCookieMsg] = useState('')
   const [cookieErr, setCookieErr] = useState('')
   const [cookieBusy, setCookieBusy] = useState(false)
+  // 偵測結果只在這次開啟設定頁有效；每次都由使用者重新觸發
+  const [probing, setProbing] = useState(false)
+  const [probed, setProbed] = useState(false)
   const [advancedOpen, setAdvancedOpen] = useState(focus === 'visual-key')
   const visualKeyRef = useRef(null)
   const [vault, setVault] = useState(state?.obsidian_vault_path || '')
@@ -141,15 +144,21 @@ export default function SettingsModal({ state, mandatory, focus, onClose, onSave
     visualKeyRef.current?.focus()
   }, [focus])
 
-  // 展開進階工具時才去問後端有哪些瀏覽器讀得到登入狀態（會讀本機 cookie 檔，約 1–2 秒）
-  useEffect(() => {
-    if (!advancedOpen) return
-    let alive = true
-    api.getBilibiliBrowsers()
-      .then(r => { if (alive) setBrowsers(r?.browsers || []) })
-      .catch(() => {})
-    return () => { alive = false }
-  }, [advancedOpen])
+  // 讀取瀏覽器 cookie 檔（約 1–2 秒）必須由使用者按下按鈕才發生：
+  // 只是展開一個設定區塊不代表同意讓人讀登入憑證。
+  async function probeBrowsers() {
+    if (probing) return
+    setProbing(true); setCookieErr(''); setCookieMsg('')
+    try {
+      const r = await api.getBilibiliBrowsers()
+      setBrowsers(r?.browsers || [])
+      setProbed(true)
+    } catch (e) {
+      setCookieErr(t('settings.bilibiliProbeFailed', e.message))
+    } finally {
+      setProbing(false)
+    }
+  }
 
   async function importCookie() {
     if (!browser || cookieBusy) return
@@ -320,6 +329,9 @@ export default function SettingsModal({ state, mandatory, focus, onClose, onSave
             <div className="settings-field">
               <span className="settings-label">{t('settings.bilibiliImport')}</span>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <button type="button" className="settings-cancel" onClick={probeBrowsers} disabled={probing}>
+                  {probing ? t('settings.bilibiliProbeBusy') : t('settings.bilibiliProbe')}
+                </button>
                 <select value={browser} onChange={e => setBrowser(e.target.value)}
                   disabled={!browsers.some(b => b.state === 'ready')}>
                   <option value="">{t('settings.bilibiliImportPick')}</option>
@@ -332,9 +344,11 @@ export default function SettingsModal({ state, mandatory, focus, onClose, onSave
                 </button>
               </div>
               <span className="settings-hint">
-                {browsers.some(b => b.state === 'ready')
-                  ? t('settings.bilibiliImportHint')
-                  : t('settings.bilibiliImportNone')}
+                {!probed
+                  ? t('settings.bilibiliProbeHint')
+                  : browsers.some(b => b.state === 'ready')
+                    ? t('settings.bilibiliImportHint')
+                    : t('settings.bilibiliImportNone')}
                 {browsers.filter(b => b.state === 'locked').map(b => ' · ' + t('settings.bilibiliBrowserLocked', b.label))}
                 {browsers.filter(b => b.state === 'no_session').map(b => ' · ' + t('settings.bilibiliBrowserNoSession', b.label))}
               </span>
