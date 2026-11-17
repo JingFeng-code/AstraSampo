@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { applyPartialSettings } from '../src/utils/settings-partial.js'
+import { connectionCheckKey } from '../src/utils/provider-check.js'
 
 const read = path => readFileSync(new URL(path, import.meta.url), 'utf8')
 
@@ -46,4 +47,49 @@ test('App 傳入的 onSettingsChanged 只更新 settings，不關閉視窗', () 
   assert.match(line, /onSaved=\{handleSettingsSaved\}/)
   // 只有一般「儲存」走 handleSettingsSaved，它才會關閉視窗
   assert.match(app, /function handleSettingsSaved\(next\)\{[\s\S]*?setShowSettings\(false\)/)
+})
+
+
+test('匯入成功會清掉手動貼上的 SESSDATA 草稿，其他欄位不動', () => {
+  const others = { outputLanguage: 'en', vault: '/notes', typedKey: 'sk-typed' }
+  const fields = { ...others, sessdata: 'manually-pasted-before-import' }
+  let draft = fields.sessdata
+  const next = { bilibili_sessdata_set: true }
+  applyPartialSettings({
+    next,
+    message: '已從 Firefox 讀取登入狀態',
+    onChanged: () => {},
+    setMessage: () => {},
+    setError: () => {},
+    resetDraft: () => { draft = '' },
+  })
+  assert.equal(draft, '', '匯入後不能再留著舊草稿，否則一般儲存會蓋掉新 cookie')
+  assert.deepEqual({ ...fields, sessdata: draft }, { ...others, sessdata: '' }, '其他未儲存欄位不能被動到')
+})
+
+test('匯入的程式碼真的把草稿清空（resetDraft: setSessdata）', () => {
+  const modal = read('../src/components/SettingsModal.jsx')
+  const importFn = modal.slice(modal.indexOf('async function importCookie'),
+                               modal.indexOf('async function removeSessdata'))
+  assert.match(importFn, /resetDraft: \(\) => setSessdata\(''\)/)
+})
+
+test('只有連線相關設定會改變檢查鍵（SESSDATA 等變動不重跑驗證）', () => {
+  const base = { engine: 'gemini', keySet: true, ollamaUrl: 'http://127.0.0.1:11434' }
+  assert.equal(
+    connectionCheckKey(base),
+    connectionCheckKey({ ...base, sessdataSet: true, vault: '/x', outputLanguage: 'en', folder: 'f' }),
+    'SESSDATA／vault／語言變動不該讓進行中的驗證被作廢',
+  )
+  assert.notEqual(connectionCheckKey(base), connectionCheckKey({ ...base, keySet: false }))
+  assert.notEqual(connectionCheckKey(base), connectionCheckKey({ ...base, ollamaUrl: 'http://127.0.0.1:11435' }))
+  assert.notEqual(connectionCheckKey(base), connectionCheckKey({ ...base, engine: 'openai' }))
+})
+
+test('連線檢查的 effect 只看 checkKey，作廢時把 checking 收掉', () => {
+  const modal = read('../src/components/SettingsModal.jsx')
+  assert.match(modal, /const checkKey = connectionCheckKey\(/)
+  assert.match(modal, /\}, \[checkKey\]\)/)
+  assert.doesNotMatch(modal, /\}, \[engine, state\]\)/, '不能整個 state 當依賴')
+  assert.match(modal, /return \(\) => \{ \+\+checkVersion\.current; setChecking\(false\) \}/)
 })
