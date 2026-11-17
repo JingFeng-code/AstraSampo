@@ -145,11 +145,19 @@ def test_bad_sessdata_is_rejected():
             pass
 
 
-def test_router_falls_back_to_local_transcription():
-    with patch.object(bilibili, "fetch_transcript_detail",
-                      side_effect=ValueError("這支影片的字幕需要登入才能讀取。")),          patch.object(router.audio_transcript, "transcribe",
-                      return_value=("[0] 本機轉錄", True, "local_speech")) as transcribe:
-        content = route_content(f"https://www.bilibili.com/video/{BVID}/")
+def test_router_falls_back_to_local_transcription_only_after_consent():
+    # 沒有字幕時改用本機轉錄，必須由使用者按下確認（allow_audio_download=True）
+    error = bilibili.NoSubtitleError("這支影片沒有字幕。")
+    error.cid = 99
+    with patch.object(bilibili, "fetch_transcript_detail", side_effect=error),             patch.object(router.audio_transcript, "transcribe",
+                         return_value=("[0] 本機轉錄", True, "local_speech")) as transcribe:
+        try:
+            route_content(f"https://www.bilibili.com/video/{BVID}/")
+            assert False, "沒有使用者同意時不能下載音訊"
+        except bilibili.NoSubtitleError:
+            pass
+        assert transcribe.call_count == 0
+        content = route_content(f"https://www.bilibili.com/video/{BVID}/", allow_audio_download=True)
     assert content["type"] == "bilibili"
     assert content["transcript_source"] == "local_speech"
     assert content["text"] == "[0] 本機轉錄"
@@ -157,11 +165,12 @@ def test_router_falls_back_to_local_transcription():
 
 
 def test_router_keeps_both_reasons_when_transcription_is_unavailable():
-    with patch.object(bilibili, "fetch_transcript_detail",
-                      side_effect=ValueError("字幕需要登入。")),          patch.object(router.audio_transcript, "transcribe",
-                      side_effect=ValueError("桌面版沒有內建語音轉錄。")):
+    error = bilibili.LoginRequiredError("字幕需要登入。")
+    error.cid = 7
+    with patch.object(bilibili, "fetch_transcript_detail", side_effect=error),             patch.object(router.audio_transcript, "transcribe",
+                         side_effect=ValueError("桌面版沒有內建語音轉錄。")):
         try:
-            route_content(f"https://www.bilibili.com/video/{BVID}/")
+            route_content(f"https://www.bilibili.com/video/{BVID}/", allow_audio_download=True)
             assert False, "Must fail when nothing can fetch the transcript"
         except ValueError as exc:
             assert "字幕需要登入" in str(exc) and "沒有內建語音轉錄" in str(exc)
@@ -214,7 +223,7 @@ if __name__ == "__main__":
     test_missing_public_subtitle()
     test_sessdata_is_sent_to_api_only_and_ai_subtitles_are_labelled()
     test_bad_sessdata_is_rejected()
-    test_router_falls_back_to_local_transcription()
+    test_router_falls_back_to_local_transcription_only_after_consent()
     test_router_keeps_both_reasons_when_transcription_is_unavailable()
     test_router_and_ask_use_bilibili_cache()
     test_summary_stream_has_bilibili_metadata()

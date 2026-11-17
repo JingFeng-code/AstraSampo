@@ -13,7 +13,8 @@ export default function useSummarizeStream({ initialResult = null, onSegError, o
   const [stopped, setStopped] = useState(false)
   const controllerRef = useRef(null)
 
-  async function summarize(url, provider, deepVisual=false, localName=null) {
+  // allowAudioDownload：只有使用者在錯誤區塊按了兩次確認才會是 true
+  async function summarize(url, provider, deepVisual=false, localName=null, allowAudioDownload=false) {
     const u = url.trim()
     if (!u || loading) return null
     const startedAt = Date.now()
@@ -27,7 +28,9 @@ export default function useSummarizeStream({ initialResult = null, onSegError, o
     try {
       await api.summarizeStream(u, provider, deepVisual, ev => {
         if (ev.type === 'progress') {
-          setProgress(p => ({ ...p, stage: ev.stage, completed: ev.completed || 0, total: ev.total || 0, startedAt: p?.startedAt || startedAt }))
+          // 下載音訊／本機轉錄的進度也走同一條路（stage: source、state: download／transcribe）
+          setProgress(p => ({ ...p, stage: ev.stage, state: ev.state, percent: ev.percent ?? null,
+            completed: ev.completed || 0, total: ev.total || 0, startedAt: p?.startedAt || startedAt }))
         } else if (ev.type === 'meta') {
           draft.source_type = ev.source_type; draft.youtube_video_id = ev.youtube_video_id
           draft.bilibili_video_id = ev.bilibili_video_id || null; draft.bilibili_page = ev.bilibili_page || null
@@ -65,7 +68,7 @@ export default function useSummarizeStream({ initialResult = null, onSegError, o
           draft.content_type = ev.content_type || draft.content_type
           setResult({ ...draft }); setProgress(null)
         }
-      }, controller.signal)
+      }, controller.signal, allowAudioDownload)
       if (!draft.cards.length && !controller.signal.aborted) setError(firstSegmentError ? `${t('error.noCards')} · ${firstSegmentError}` : t('error.noCards'))
     } catch (e) {
       if (controller.signal.aborted) {

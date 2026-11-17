@@ -26,6 +26,10 @@ export const sourceHintKey = source => SOURCE_HINT_KEYS[source] || null
 // 後端沒有字幕時，兩種語言的錯誤訊息都會請使用者匯入 SRT／VTT
 export const needsSubtitleImport = error => /SRT/.test(String(error || ''))
 
+// 只有 Bilibili 的「沒有字幕／需要登入」才提供下載音訊的選項（後端也只認這兩種錯誤）
+export const canOfferAudioDownload = (source, error) =>
+  source === 'bilibili' && needsSubtitleImport(error)
+
 // 沒有字幕時還能不能改用讀畫面：只有 YouTube 能交給 Gemini。已開啟又有金鑰卻仍失敗時，就沒有下一步可提供。
 export function noCaptionAction(source, deepVisualOn, geminiConfigured) {
   if (source !== 'youtube') return null
