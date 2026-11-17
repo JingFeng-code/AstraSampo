@@ -332,14 +332,20 @@ def summarize(req: SummarizeRequest) -> dict:
         if model_used and model_used not in models_used:
             models_used.append(model_used)
 
+    # 模型真的產生的卡片（保底卡不算）——整體總結只在這種卡片存在時才值得花一次呼叫
+    model_cards = list(all_cards)
     if not all_cards:
+        # 每一段都失敗（Ollama 沒開、金鑰錯、逾時…）：要把失敗原因交給前端，
+        # 補一張保底卡會讓使用者以為分析成功
+        if failed:
+            raise HTTPException(500, messages.t("summarize.all_segments_failed"))
         if (content.get("text") or "").strip():
             all_cards = [_fallback_card(content["text"], config.get("OUTPUT_LANGUAGE"))]
         else:
             raise HTTPException(500, messages.t("summarize.all_segments_failed"))
 
     return {"title": title or messages.t("summarize.untitled"),
-            "overview": _build_overview(all_cards, title, config.get("OUTPUT_LANGUAGE"), req.provider),
+            "overview": _build_overview(model_cards, title, config.get("OUTPUT_LANGUAGE"), req.provider),
             "source_type": content["type"],
             "source_url": req.url, "youtube_video_id": content.get("video_id") if content["type"] == "youtube" else None,
             "bilibili_video_id": content.get("video_id") if content["type"] == "bilibili" else None,
@@ -487,17 +493,21 @@ def _stream_events(req: SummarizeRequest) -> Iterator[str]:
             # 取消還在排隊的段落，不再呼叫模型；已經在跑的那段無法中斷，會在背景做完。
             # 不等待（wait=False），以免關閉 generator 時卡住伺服器。
             ex.shutdown(wait=False, cancel_futures=True)
-        if total == 0 and (content.get("text") or "").strip():
-            # 模型整段都沒給卡片（短片最常見）：補一張抽取式摘要，讓畫面有內容
+        # 模型真的產生的卡片（保底卡不算）：只有這種卡片存在時才值得再花一次呼叫做總結
+        model_cards = list(collected)
+        if total == 0 and failed == 0 and (content.get("text") or "").strip():
+            # 模型沒有失敗、只是都沒給卡片（短片最常見）：補一張抽取式摘要，讓畫面有內容
             fallback = _fallback_card(content["text"], config.get("OUTPUT_LANGUAGE"))
             total += 1
             collected.append(fallback)
             yield line({"type": "cards", "seg": len(chunks), "cards": [fallback],
                         "model": messages.t("summarize.fallback_model"), "content_type": "other"})
-        if collected:
+        # 每一段都失敗時不送保底卡、也不呼叫整體總結：seg_error 已經把原因送到前端，
+        # 前端會顯示「沒有產生任何重點 · <原因>」，比一張看起來成功的卡誠實。
+        if collected and model_cards:
             # 前端在 done 之後會把 overview 放在卡片上方；模型失敗時退回卡片標題
             yield line({"type": "overview", **_build_overview(
-                collected, title, config.get("OUTPUT_LANGUAGE"), req.provider)})
+                model_cards, title, config.get("OUTPUT_LANGUAGE"), req.provider)})
         yield line({"type": "done", "title": title or messages.t("summarize.untitled"),
                     "model_used": "、".join(models_used), "segments": len(chunks),
                     "content_type": _pick_content_type(content_types),
