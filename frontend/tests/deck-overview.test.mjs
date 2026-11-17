@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { deckShortcutsEnabled, hasOverview, matchOverviewPoint, readDeckTab, resolveDeckTab, writeDeckTab } from '../src/utils/deck-tabs.js'
+import { deckShortcutsEnabled, getDeckStorage, hasOverview, matchOverviewPoint, readDeckTab, resolveDeckTab, writeDeckTab } from '../src/utils/deck-tabs.js'
 import { STRINGS } from '../src/i18n/strings.js'
 
 const read = path => readFileSync(new URL(path, import.meta.url), 'utf8')
@@ -112,4 +112,27 @@ test('分頁文字兩種語言都有', () => {
       assert.ok(table[key], `${lang} 缺少 ${key}`)
     }
   }
+})
+
+
+test('瀏覽器停用儲存時，取得 localStorage 不該讓元件當掉', () => {
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'localStorage')
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    get() { throw new DOMException('denied', 'SecurityError') },
+  })
+  try {
+    // 讀取 localStorage 屬性本身就丟例外；要回 null，不能把例外往外丟
+    assert.equal(getDeckStorage(), null)
+    // 拿到 null 之後，原本的讀寫函式仍然安全
+    assert.equal(readDeckTab(getDeckStorage()), 'cards')
+    assert.doesNotThrow(() => writeDeckTab(getDeckStorage(), 'overview'))
+  } finally {
+    if (original) Object.defineProperty(globalThis, 'localStorage', original)
+    else delete globalThis.localStorage
+  }
+  // 元件不能再自己 typeof localStorage（那行會在 try/catch 之前就丟例外）
+  const deck = read('../src/components/CardDeck.jsx')
+  assert.doesNotMatch(deck, /typeof localStorage/)
+  assert.match(deck, /const storage=getDeckStorage\(\)/)
 })

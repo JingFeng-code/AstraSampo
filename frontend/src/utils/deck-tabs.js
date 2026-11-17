@@ -8,6 +8,16 @@ export function hasOverview(overview) {
   return !!overview.summary || (overview.points || []).length > 0
 }
 
+// 瀏覽器政策停用儲存時，連讀取全域 localStorage 屬性本身都會丟 SecurityError，
+// 所以「取得儲存物件」這件事也要包 try/catch（只包 getItem／setItem 不夠）。
+export function getDeckStorage(win = globalThis) {
+  try {
+    return win?.localStorage || null
+  } catch {
+    return null
+  }
+}
+
 export function readDeckTab(storage) {
   try {
     return storage?.getItem(DECK_TAB_KEY) === 'overview' ? 'overview' : 'cards'

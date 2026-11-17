@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { fmtTime, pickField, summaryLines, TRANSCRIPT_KEYS, TRANSLATION_KEYS, TRANSCRIPT_SOURCE_KEYS } from '../utils.js'
 import { defaultTrack, hasCode } from '../hooks/useImplement.js'
-import { hasOverview, matchOverviewPoint, readDeckTab, resolveDeckTab, writeDeckTab } from '../utils/deck-tabs.js'
+import { getDeckStorage, hasOverview, matchOverviewPoint, readDeckTab, resolveDeckTab, writeDeckTab } from '../utils/deck-tabs.js'
 import { useI18n } from '../i18n/index.jsx'
 
 // 重點數量多時把導覽縮小排密，避免撐破標題列
@@ -14,7 +14,7 @@ export default function CardDeck({ result, index, setIndex, clippedIds, onClip, 
   // 總結是參考資料，不該擋在每次切換的重點上方；記住使用者上次停在哪個分頁
   const overview=result.overview
   const showTabs=cards.length>0&&hasOverview(overview)
-  const storage=typeof localStorage==='undefined'?null:localStorage
+  const storage=getDeckStorage()
   const [tab,setTab]=useState(()=>readDeckTab(storage))
   const firstResult=useRef(result)
   // 分析另一支影片時回到重點；重新整理頁面（同一個 result 首次掛載）則保留上次的選擇
