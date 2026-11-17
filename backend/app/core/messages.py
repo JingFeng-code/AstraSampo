@@ -313,18 +313,18 @@ MESSAGES: dict[str, dict[str, str]] = {
     },
     # ── 本機轉寫 ────────────────────────────────────────────
     "whisper.unavailable_desktop": {
-        "zh-Hant": "桌面版不會下載線上影片的聲音來轉成文字。"
-                   "可以用陪看模式邊播放邊在這台電腦記下聲音，或匯入你有權使用的 SRT／VTT 字幕檔後再按「開始」。",
-        "en": "The desktop app does not download online video audio for transcription. "
-              "Use watch-along mode to record it on this computer while it plays, or import an "
-              "SRT/VTT file you are allowed to use, then press Start.",
+        "zh-Hant": "這個環境沒有可用的語音轉錄引擎。桌面版請在錯誤訊息下方選擇「下載音訊並在本機轉成文字」；"
+                   "也可以用陪看模式邊播放邊記下聲音，或匯入你有權使用的 SRT／VTT 字幕檔後再按「開始」。",
+        "en": "No speech-to-text engine is available here. In the desktop app, choose "
+              "“Download audio and transcribe on this computer” below the error; you can also use "
+              "watch-along, or import an SRT/VTT file you are allowed to use.",
     },
     "whisper.downloader_missing": {
         "zh-Hant": "這個環境沒有安裝影片下載工具，無法下載音訊來轉錄語音。"
-                   "YouTube 影片可以匯入你有權使用的 SRT／VTT 字幕檔後再按「開始」。",
+                   "如果你有可以使用 SRT／VTT 字幕檔，可以匯入後再按「開始」。",
         "en": "The video download tool is not installed in this environment, so the audio "
-              "cannot be downloaded for transcription. For YouTube videos, import an SRT/VTT "
-              "file you are allowed to use, then press Start.",
+              "cannot be downloaded for transcription. If you have an SRT/VTT file you may "
+              "use, import it, then press Start.",
     },
     "whisper.too_long": {
         "zh-Hant": "這支影片超過 {minutes} 分鐘的上限，已停止下載音訊。",
@@ -336,21 +336,21 @@ MESSAGES: dict[str, dict[str, str]] = {
     },
     "whisper.download_failed": {
         "zh-Hant": "無法下載此影片的音訊（可能不支援、需登入或已下架）。"
-                   "YouTube 影片可以匯入你有權使用的 SRT／VTT 字幕檔後再按「開始」。",
+                   "如果你有可以使用 SRT／VTT 字幕檔，可以匯入後再按「開始」。",
         "en": "Could not download this video's audio — it may be unsupported, private, or "
               "taken down. For YouTube videos, import an SRT/VTT file you are allowed to use, "
               "then press Start.",
     },
     "whisper.engine_missing": {
         "zh-Hant": "這個環境沒有安裝語音轉錄工具，無法改用語音辨識。"
-                   "YouTube 影片可以匯入你有權使用的 SRT／VTT 字幕檔後再按「開始」。",
+                   "如果你有可以使用 SRT／VTT 字幕檔，可以匯入後再按「開始」。",
         "en": "The speech-to-text tool is not installed in this environment, so the audio "
-              "cannot be transcribed. For YouTube videos, import an SRT/VTT file you are "
-              "allowed to use, then press Start.",
+              "cannot be transcribed. If you have an SRT/VTT file you may use, import it, "
+              "then press Start.",
     },
     "whisper.transcribe_failed": {
         "zh-Hant": "無法轉錄這段音訊，請稍後再試。"
-                   "YouTube 影片可以匯入你有權使用的 SRT／VTT 字幕檔後再按「開始」。",
+                   "如果你有可以使用 SRT／VTT 字幕檔，可以匯入後再按「開始」。",
         "en": "Could not transcribe this audio. Try again later. For YouTube videos, import "
               "an SRT/VTT file you are allowed to use, then press Start.",
     },
