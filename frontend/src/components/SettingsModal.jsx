@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import * as api from '../api.js'
 import { useI18n } from '../i18n/index.jsx'
+import { applyPartialSettings } from '../utils/settings-partial.js'
+import { connectionCheckKey } from '../utils/provider-check.js'
 import { PROVIDER_ORDER, providerValue } from '../hooks/useModels.js'
 import { aiConnectionStatus, connectionCheckTarget } from '../utils/ai-source.js'
 
@@ -25,7 +27,7 @@ function sourceParts(value = 'smart') {
     { engine: value.slice(0, colon), model: value.slice(colon + 1) }
 }
 
-export default function SettingsModal({ state, mandatory, focus, onClose, onSaved, provider='smart', providers={}, onProviderChange }) {
+export default function SettingsModal({ state, mandatory, focus, onClose, onSaved, provider='smart', providers={}, onProviderChange, onSettingsChanged }) {
   const { t, lang, setLang, langs } = useI18n()
   const initial = sourceParts(provider)
   const [engine, setEngine] = useState(initial.engine)
@@ -131,12 +133,17 @@ export default function SettingsModal({ state, mandatory, focus, onClose, onSave
 
   // 已設定金鑰不用再輸入；本機 Ollama 和智慧模式可直接檢查連線。
   // 只檢查目前所選的供應商，不同時向所有雲端服務發出請求。
+  // 只看會影響連線的設定；SESSDATA／vault 等變動時不要重跑（否則會作廢進行中的驗證）
+  const checkKey = connectionCheckKey({
+    engine, keySet: !!state?.[`${stateKey}_set`], ollamaUrl,
+  })
   useEffect(() => {
     if (KEY_FIELDS[engine] && !state?.[`${stateKey}_set`]) return
     if (KEY_FIELDS[engine] && keys[KEY_FIELDS[engine]]?.trim()) return
     checkProvider(engine, '', ollamaUrl)
-    return () => { ++checkVersion.current }
-  }, [engine, state])
+    // 作廢時也要把 checking 收掉：新的 effect 可能因為使用者正在輸入金鑰而提早 return
+    return () => { ++checkVersion.current; setChecking(false) }
+  }, [checkKey])
 
   useEffect(() => {
     if (focus !== 'visual-key') return
@@ -166,8 +173,10 @@ export default function SettingsModal({ state, mandatory, focus, onClose, onSave
     try {
       const next = await api.importBilibiliCookie(browser)
       const label = browsers.find(b => b.browser === browser)?.label || browser
-      setCookieMsg(t('settings.bilibiliImportDone', label))
-      onSaved?.(next)
+      applyPartialSettings({ next, message: t('settings.bilibiliImportDone', label),
+        onChanged: onSettingsChanged, setMessage: setCookieMsg, setError: setCookieErr,
+        // 清掉手動貼上的草稿，否則之後按一般「儲存」會把舊草稿送出去、蓋掉剛匯入的 cookie
+        resetDraft: () => setSessdata('') })
     } catch (e) {
       setCookieErr(e.message)
     } finally {
@@ -182,8 +191,8 @@ export default function SettingsModal({ state, mandatory, focus, onClose, onSave
       // 明確送空字串：後端只有收到空字串才會清掉，欄位空白不會
       const next = await api.saveSettings({ bilibili_sessdata: '' })
       setSessdata('')
-      setCookieMsg(t('settings.bilibiliRemoveDone'))
-      onSaved?.(next)
+      applyPartialSettings({ next, message: t('settings.bilibiliRemoveDone'),
+        onChanged: onSettingsChanged, setMessage: setCookieMsg, setError: setCookieErr })
     } catch (e) {
       setCookieErr(t('settings.bilibiliRemoveFailed', e.message))
     } finally {
