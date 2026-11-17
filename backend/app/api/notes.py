@@ -58,7 +58,49 @@ _EXPORT_LIMIT = 2 * 1024 * 1024
 _EXPORT_FOLDER = "AstraTube"
 
 
+# Windows 的「下載」可能被搬到別的磁碟或 OneDrive，寫死 ~/Downloads 會在使用者目錄
+# 另外生出一個資料夾，使用者反而在檔案總管的「下載」找不到檔案。
+_FOLDERID_DOWNLOADS = "{374DE290-123F-4565-9164-39C4925E467B}"
+
+
+def _windows_downloads_folder():
+    """用 Known Folder API 問 Windows「下載」的真實位置；拿不到就回 None。"""
+    try:
+        import ctypes
+        from ctypes import wintypes
+        from uuid import UUID
+    except Exception:  # 非 Windows 或精簡版 Python
+        return None
+
+    class GUID(ctypes.Structure):
+        _fields_ = [("Data1", wintypes.DWORD), ("Data2", wintypes.WORD),
+                    ("Data3", wintypes.WORD), ("Data4", ctypes.c_ubyte * 8)]
+
+    folder = UUID(_FOLDERID_DOWNLOADS)
+    folder_id = GUID(folder.fields[0], folder.fields[1], folder.fields[2],
+                     (ctypes.c_ubyte * 8)(*folder.bytes[8:]))
+    path_ptr = ctypes.c_wchar_p()
+    try:
+        result = ctypes.windll.shell32.SHGetKnownFolderPath(
+            ctypes.byref(folder_id), 0, None, ctypes.byref(path_ptr))
+    except Exception:
+        return None
+    if result != 0:
+        return None
+    try:
+        return Path(path_ptr.value) if path_ptr.value else None
+    finally:
+        try:
+            ctypes.windll.ole32.CoTaskMemFree(path_ptr)
+        except Exception:
+            pass
+
+
 def _downloads_root() -> Path:
+    if os.name == "nt":
+        folder = _windows_downloads_folder()
+        if folder is not None:
+            return folder
     return Path.home() / "Downloads"
 
 
@@ -68,9 +110,13 @@ def _exports_root() -> Path:
     return (Path(data) if data else Path(__file__).resolve().parents[3]) / "exports"
 
 
+# 控制字元（含 NUL、換行、Tab）會讓部分平台的開檔直接失敗；它們不是檔名的一部分
+_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
+
+
 def _export_name(name: str) -> str:
     """匯出檔名：只取名稱本身（不含路徑與副檔名），長度留給「 (2)」這種後綴。"""
-    base = _safe_name(name)
+    base = _safe_name(_CONTROL_CHARS.sub("", name or "").replace(os.sep, " ").replace("/", " "))
     if base.lower().endswith(".md"):
         base = base[:-3]
     # Windows 不接受結尾的點與空白，清掉以免寫檔直接失敗
@@ -173,12 +219,12 @@ def export_note(req: ExportNoteRequest, request: Request) -> dict:
     try:
         path = _write_export(_downloads_root() / _EXPORT_FOLDER, base, text)
         return {"saved_to": str(path), "fallback": False}
-    except OSError:
+    except (OSError, ValueError):
         # 免安裝版或受控環境可能不能寫「下載」資料夾：改存程式資料夾並在畫面說明
         try:
             path = _write_export(_exports_root(), base, text)
             return {"saved_to": str(path), "fallback": True}
-        except OSError as exc:
+        except (OSError, ValueError) as exc:
             raise HTTPException(500, messages.t("notes.export_failed", error=str(exc))) from exc
 
 

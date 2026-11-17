@@ -67,7 +67,9 @@ def test_same_name_does_not_overwrite():
 
 def test_hostile_filenames_stay_inside_target_folder():
     names = ["..\\..\\evil", "../../evil", "C:\\Windows\\evil", "a:b*c?d|e", "..", "   ",
-             "x" * 400, "con", "note.md", "note.MD"]
+             "x" * 400, "con", "note.md", "note.MD",
+             # 控制字元不是檔名的一部分；開檔會失敗，後端要自己清掉（不是靠前端）
+             "a\x00b", "line1\nline2", "\x1f\x07bell", "\x7fdel"]
     with TemporaryDirectory() as tmp, patch.dict(os.environ, CLEAN_ENV):
         base = Path(tmp)
         folder = base / "Downloads" / "AstraTube"
@@ -81,6 +83,7 @@ def test_hostile_filenames_stay_inside_target_folder():
                 assert path.parent == folder, (name, path)
                 assert path.name.endswith(".md") and path.name.count(".md") == 1, path.name
                 assert "/" not in path.name and "\\" not in path.name and ":" not in path.name
+                assert not any(ord(ch) < 0x20 or ord(ch) == 0x7f for ch in path.name), repr(path.name)
                 assert len(path.name) <= 120, (name, len(path.name))
                 saved.append(path)
         assert len(set(saved)) == len(names), "同名清理後也不能互相覆蓋"
@@ -108,6 +111,24 @@ def test_only_requests_from_this_computer_are_accepted():
         assert not (base / "program" / "exports").exists()
 
 
+def test_downloads_folder_uses_windows_known_folder_when_available():
+    """Windows 的「下載」可能不在 ~/Downloads；使用者搬過資料夾時要跟著搬。"""
+    with TemporaryDirectory() as tmp, patch.dict(os.environ, CLEAN_ENV):
+        base = Path(tmp)
+        real = base / "OneDrive" / "下載"
+        with patch.object(notes.os, "name", "nt"), patch.object(notes, "_windows_downloads_folder", lambda: real):
+            assert notes._downloads_root() == real
+        # 取不到（舊版 Windows／API 失敗）才退回 ~/Downloads
+        with patch.object(notes.os, "name", "nt"), \
+                patch.object(notes, "_windows_downloads_folder", lambda: None), \
+                patch.object(Path, "home", classmethod(lambda cls: base)):
+            assert notes._downloads_root() == base / "Downloads"
+        # 非 Windows 一律用 ~/Downloads（CI 就是這條路）
+        with patch.object(notes.os, "name", "posix"), \
+                patch.object(Path, "home", classmethod(lambda cls: base)):
+            assert notes._downloads_root() == base / "Downloads"
+
+
 def test_unwritable_downloads_falls_back_to_program_folder():
     with TemporaryDirectory() as tmp, patch.dict(os.environ, CLEAN_ENV):
         base = Path(tmp)
@@ -129,6 +150,7 @@ if __name__ == "__main__":
     test_normal_export_writes_utf8_file_in_downloads()
     test_same_name_does_not_overwrite()
     test_hostile_filenames_stay_inside_target_folder()
+    test_downloads_folder_uses_windows_known_folder_when_available()
     test_oversized_markdown_is_rejected()
     test_only_requests_from_this_computer_are_accepted()
     test_unwritable_downloads_falls_back_to_program_folder()

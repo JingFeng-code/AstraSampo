@@ -415,6 +415,7 @@ export const STRINGS = {
 
     'notes.downloadMarkdown': 'Download Markdown notes',
     'notes.copyMarkdown': 'Copy Markdown',
+    'notes.lastSaved': 'Last saved',
     'notes.clipboardUnavailable': 'This window does not allow clipboard access.',
     'note.summary': 'AstraTube summary',
     'note.untitled': 'Untitled note',
@@ -839,6 +840,7 @@ export const STRINGS = {
 
     'notes.downloadMarkdown': '下載 Markdown 筆記',
     'notes.copyMarkdown': '複製 Markdown',
+    'notes.lastSaved': '最後存檔',
     'notes.clipboardUnavailable': '這個視窗不允許使用剪貼簿。',
     'note.summary': 'AstraTube 摘要',
     'note.untitled': '未命名筆記',

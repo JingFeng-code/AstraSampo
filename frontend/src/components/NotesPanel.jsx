@@ -1,7 +1,7 @@
 import { fmtTime } from '../utils.js'
 import { useI18n } from '../i18n/index.jsx'
 
-export default function NotesPanel({ vault, clips, onClipNoteChange, onRemoveClip, freeNote, setFreeNote, filename, setFilename, onSave, onExport, onCopy, saving, folders, noteFiles, saveOpts, onSaveOptsChange }) {
+export default function NotesPanel({ vault, clips, onClipNoteChange, onRemoveClip, freeNote, setFreeNote, filename, setFilename, onSave, onExport, onCopy, lastSaved, saving, folders, noteFiles, saveOpts, onSaveOptsChange }) {
   const { t } = useI18n()
   const vs=!vault.configured?{cls:'warn',text:t('vault.notConfigured')}:!vault.exists?{cls:'warn',text:t('vault.missing')}:{cls:'ok',text:t('vault.connected')}
   const isAppend=saveOpts.mode==='append'
@@ -55,6 +55,8 @@ export default function NotesPanel({ vault, clips, onClipNoteChange, onRemoveCli
       <button className="btn-save" onClick={onExport} disabled={!(clips.length>0||freeNote.trim())}>{t('notes.downloadMarkdown')}</button>
       {/* 存檔失敗（例如「下載」資料夾不能寫）時的退路：至少能把 Markdown 複製走 */}
       <button className="btn-paper notes-copy" onClick={onCopy} disabled={!(clips.length>0||freeNote.trim())}>{t('notes.copyMarkdown')}</button>
+      {/* 存檔成功後留在畫面上，文字可選取；下次存檔或收合面板才清掉 */}
+      {lastSaved&&<p className="notes-last-saved"><span className="cfg-label">{t('notes.lastSaved')}</span><span className="path">{lastSaved}</span></p>}
       {vault.configured&&<p className="save-hint"><span className={`vault-chip ${vs.cls}`} style={{marginLeft:0}}><span className="dot"/> {vs.text}</span><br/>{vault.configured?`vault：${vault.path?.replace(/[/\\][^/\\]*$/,'')||vault.path}`:t('notes.vaultHint')}</p>}
     </aside>
   )

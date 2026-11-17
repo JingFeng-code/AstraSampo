@@ -55,7 +55,8 @@ export async function saveNoteMarkdown({ markdown, filename, isDesktop, saveToBa
       const res = await saveToBackend(filename, markdown)
       const savedTo = res?.saved_to || ''
       const message = res?.fallback ? t('toast.savedToFallback', savedTo) : t('toast.savedTo', savedTo)
-      return { ok: true, message }
+      // savedTo 讓筆記面板留在畫面上：toast 幾秒就消失，長路徑根本看不完
+      return { ok: true, message, savedTo }
     } catch (e) {
       return { ok: false, message: t('toast.exportFailed', e?.message || String(e)) }
     }

@@ -94,6 +94,8 @@ export default function App() {
   const [settingsFocus,setSettingsFocus]=useState(null)
   const [subtitleRevision,setSubtitleRevision]=useState(0)
   const [toast,setToast]=useState(null)
+  // 上次存檔的完整路徑：toast 只活 4 秒，長路徑要留在面板上給使用者看和複製
+  const [lastNoteSave,setLastNoteSave]=useState(null)
   const toastTimer=useRef(null)
   const showToast=(msg,isErr=false)=>{clearTimeout(toastTimer.current);setToast({msg,isErr});toastTimer.current=setTimeout(()=>setToast(null),4200)}
 
@@ -181,7 +183,7 @@ export default function App() {
       markdown, filename:markdownFilename(title), isDesktop:!!getDesktopConnection(), t,
       saveToBackend:exportNoteMarkdown,
       downloadInBrowser:downloadMarkdown,
-    }).then(r=>showToast(r.message,!r.ok))
+    }).then(r=>{showToast(r.message,!r.ok);if(r.ok&&r.savedTo)setLastNoteSave(r.savedTo)})
   }
 
   async function handleCopyNotes(){
@@ -281,8 +283,8 @@ export default function App() {
       </main>
       {/* 筆記／問模型：可最小化浮窗，不佔用主版面，展開/收合狀態記在 localStorage */}
       {result&&<>
-        <FloatingPanel id="notes" corner="br" title={t('panel.notes')} badge={cardsHook.clips.length||null}>
-          <NotesPanel onExport={handleExportNotes} onCopy={handleCopyNotes} vault={notes.vault} clips={cardsHook.clips} onClipNoteChange={cardsHook.updateClipNote} onRemoveClip={cardsHook.removeClip} freeNote={freeNote} setFreeNote={setFreeNote} filename={filename} setFilename={setFilename} onSave={handleSave} saving={notes.saving} folders={notes.folders} noteFiles={notes.noteFiles} saveOpts={notes.saveOpts} onSaveOptsChange={notes.onSaveOptsChange}/>
+        <FloatingPanel id="notes" corner="br" title={t('panel.notes')} badge={cardsHook.clips.length||null} onToggle={min=>{if(min)setLastNoteSave(null)}}>
+          <NotesPanel onExport={handleExportNotes} onCopy={handleCopyNotes} lastSaved={lastNoteSave} vault={notes.vault} clips={cardsHook.clips} onClipNoteChange={cardsHook.updateClipNote} onRemoveClip={cardsHook.removeClip} freeNote={freeNote} setFreeNote={setFreeNote} filename={filename} setFilename={setFilename} onSave={handleSave} saving={notes.saving} folders={notes.folders} noteFiles={notes.noteFiles} saveOpts={notes.saveOpts} onSaveOptsChange={notes.onSaveOptsChange}/>
         </FloatingPanel>
         <FloatingPanel id="ask" corner="bl" title={t('panel.ask')}>
           <AskPanel provider={activeProvider} videoId={result?.local_video_id?`local:${result.local_video_id}`:result?.youtube_video_id||(result?.bilibili_video_id?`bilibili:${result.bilibili_video_id}:p${result.bilibili_page||1}`:null)}/>
