@@ -2,6 +2,8 @@
 
 不碰網路、不呼叫真的 yt-dlp 或語音引擎：全部用假的模組與函式。
 """
+import asyncio
+import json
 import os
 import sys
 import tempfile
@@ -194,6 +196,73 @@ def test_remote_request_cannot_ask_for_audio_download():
     assert route.call_count == 1
 
 
+def _drain(response):
+    async def collect():
+        out = []
+        async for chunk in response.body_iterator:
+            out.append(chunk if isinstance(chunk, bytes) else str(chunk).encode("utf-8"))
+        return out
+
+    return asyncio.run(collect())
+
+
+def _stream_events(req, route):
+    """跑完一次串流並回傳解析後的事件（模型段落用假的、不會碰網路）。"""
+    empty = {"title": "t", "cards": [], "content_type": "other"}
+    with patch.object(summarize, "route_content", side_effect=route),             patch.object(summarize, "_run_segment", return_value=(empty, "model")),             patch.object(summarize.llm_router, "generate",
+                         return_value=('{"summary": "", "points": []}', "model")):
+        raw = b"".join(_drain(summarize.summarize_stream(req))).decode("utf-8")
+    return [json.loads(line) for line in raw.splitlines() if line.strip()]
+
+
+def _content():
+    return Content(type="bilibili", video_id="BV1jhns6DEzi", title=None, text="內容",
+                   is_chinese=True, has_timestamps=True, transcript_source="local_speech")
+
+
+def test_download_and_transcribe_progress_keep_stage_source():
+    """事件契約：進度事件固定是 stage="source"，下載／轉錄放在 state。"""
+    def route(url, **kwargs):
+        on_progress = kwargs["on_progress"]
+        on_progress({"stage": "download", "percent": 42})
+        on_progress({"stage": "transcribe"})
+        return _content()
+
+    events = _stream_events(SummarizeRequest(url=URL, provider=SESS), route)
+    progress = [event for event in events if event.get("type") == "progress"]
+    download = [event for event in progress if event.get("state") == "download"]
+    assert download, progress
+    assert download[0]["stage"] == "source", "stage 不能變成 download"
+    assert download[0]["percent"] == 42
+    transcribe = [event for event in progress if event.get("state") == "transcribe"]
+    assert transcribe and transcribe[0]["stage"] == "source"
+    assert "percent" in transcribe[0]
+
+
+def test_fatal_events_carry_a_code_for_bilibili_caption_errors():
+    for error, expected in [(no_subtitle(), "bilibili_no_subtitle"),
+                            (bilibili.LoginRequiredError("這支影片的字幕需要登入，且 SESSDATA 已失效。"),
+                             "bilibili_login_required")]:
+        def route(url, _error=error, **kwargs):
+            raise _error
+
+        fatal = [event for event in _stream_events(SummarizeRequest(url=URL, provider=SESS), route)
+                 if event.get("type") == "fatal"]
+        assert fatal, "要送出 fatal"
+        assert fatal[0].get("code") == expected, fatal[0]
+        assert fatal[0]["error"]
+
+
+def test_fatal_events_have_no_code_for_other_errors():
+    for message in ["Bilibili 字幕下載失敗或遭到限制。", "Bilibili 影片沒有第 2 個分 P，請確認連結。"]:
+        def route(url, _message=message, **kwargs):
+            raise ValueError(_message)
+
+        fatal = [event for event in _stream_events(SummarizeRequest(url=URL, provider=SESS), route)
+                 if event.get("type") == "fatal"]
+        assert fatal and "code" not in fatal[0], fatal[0]
+
+
 def test_closing_the_stream_stops_the_background_fetch():
     started = threading.Event()
     stopped = threading.Event()
@@ -225,5 +294,8 @@ if __name__ == "__main__":
     test_cancel_during_transcription_stops_and_removes_temp_dir()
     test_cache_key_includes_cid()
     test_remote_request_cannot_ask_for_audio_download()
+    test_download_and_transcribe_progress_keep_stage_source()
+    test_fatal_events_carry_a_code_for_bilibili_caption_errors()
+    test_fatal_events_have_no_code_for_other_errors()
     test_closing_the_stream_stops_the_background_fetch()
     print("Audio download tests passed")

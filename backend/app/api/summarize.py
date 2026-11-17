@@ -25,6 +25,7 @@ from app.prompts.summarize import (deepdive_prompt, deepdive_system,
                                    overview_prompt, overview_system)
 from app.services.chunker import MAX_CHUNKS, chunk_content
 from app.api.local_video import on_this_computer
+from app.transcript import bilibili
 from app.transcript.router import Content, route_content
 
 router = APIRouter(tags=["summarize"])
@@ -130,6 +131,22 @@ def _split(content: Content, provider: str | None) -> Tuple[list[str], int]:
     chunks = chunk_content(content["text"], has_ts, chunk_chars=profile.chunk_chars,
                            merge_overflow=False)
     return chunks[:MAX_CHUNKS], max(0, len(chunks) - MAX_CHUNKS)
+
+
+def _source_progress(info: dict) -> dict:
+    """把 audio_transcript 的進度轉成串流事件契約。
+
+    來源階段固定是 stage="source"，下載／轉錄放在 state；直接用 {**info} 會把
+    stage 蓋成 "download"，前端就認不出來、只能顯示預設的「整理重點」。
+    """
+    return {"type": "progress", "stage": "source", "state": info.get("stage"),
+            "percent": info.get("percent")}
+
+
+_FATAL_CODES = {
+    bilibili.NoSubtitleError: "bilibili_no_subtitle",
+    bilibili.LoginRequiredError: "bilibili_login_required",
+}
 
 
 def _require_local_audio(req: SummarizeRequest, request: Request | None) -> None:
@@ -432,7 +449,7 @@ def _stream_events(req: SummarizeRequest) -> Iterator[str]:
                     except Empty:
                         break
                     forwarded = True
-                    yield line({"type": "progress", "stage": "source", **info})
+                    yield line(_source_progress(info))
                 if not forwarded:
                     # 心跳：讓伺服器每 0.5 秒有機會發現使用者已經按了停止
                     yield ""
@@ -441,7 +458,7 @@ def _stream_events(req: SummarizeRequest) -> Iterator[str]:
                     info = progress.get_nowait()
                 except Empty:
                     break
-                yield line({"type": "progress", "stage": "source", **info})
+                yield line(_source_progress(info))
         finally:
             if worker.is_alive():
                 # 使用者按停止或連線中斷：通知下載／轉寫中止（暫存檔由 audio_transcript 清掉）
@@ -449,7 +466,13 @@ def _stream_events(req: SummarizeRequest) -> Iterator[str]:
 
         error = holder.get("error")
         if isinstance(error, ValueError):
-            yield line({"type": "fatal", "error": str(error)})
+            # 錯誤文字會跟著介面語言變；前端要靠 code 決定要不要提供下載音訊的選項
+            code = next((value for kind, value in _FATAL_CODES.items()
+                         if isinstance(error, kind)), None)
+            payload = {"type": "fatal", "error": str(error)}
+            if code:
+                payload["code"] = code
+            yield line(payload)
             return
         if error is not None:
             print(f"[summarize] 內容擷取失敗：{error!a}", flush=True)

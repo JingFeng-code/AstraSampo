@@ -19,6 +19,7 @@ import useNotesVault from './hooks/useNotesVault.js'
 import { useI18n } from './i18n/index.jsx'
 import { DEEP_VISUAL_KEY, deepVisualNotice, effectiveDeepVisual, isBilibiliUrl } from './utils/user-mode.js'
 import { canOfferAudioDownload, detectSource, needsSubtitleImport, noCaptionAction, sourceHintKey } from './utils/source-info.js'
+import { sourceProgressLabel } from './utils/progress-label.js'
 import { createNoteMarkdown, downloadMarkdown, markdownFilename, saveNoteMarkdown } from './utils/notes-export.js'
 import { noteVideoKey, resolveNoteFilename } from './utils/note-filename.js'
 import { NARROW_QUERY, effectiveResultTab, resultTabs } from './utils/result-tabs.js'
@@ -61,19 +62,18 @@ function GenerationProgress({ progress }){
   const seg=Number.isInteger(progress.seg)?t('progress.segment',progress.seg+1):t('progress.preparing')
   const model=progress.model?` · ${progress.model}`:''
   const apiName=progress.provider==='opencode'?'OpenCode':(progress.provider||'API')
-  let label=t('progress.generate')
   // 下載音訊／本機轉錄可能跑好幾分鐘，要讓畫面看得到現在在做什麼
-  if(progress.stage==='source'&&progress.state==='download')
-    label=progress.percent!=null?t('progress.download',progress.percent):t('progress.downloadUnknown')
-  else if(progress.stage==='source'&&progress.state==='transcribe') label=t('progress.transcribe')
-  else if(progress.stage==='source') label=t('progress.source')
-  else if(progress.phase==='coverage') label=t('progress.coverage',seg,model)
-  else if(progress.state==='rate_wait') label=t('progress.rateWait',seg,apiName,progress.delay||0)
-  else if(progress.state==='retry_wait') label=t('progress.retry',seg,apiName,progress.delay||0,progress.attempt||'',progress.tries||'')
-  else if(progress.state==='model_switch') label=t('progress.modelSwitch',seg,progress.model)
-  else if(progress.state==='key_switch') label=t('progress.keySwitch',seg)
-  else if(progress.state==='request') label=t('progress.waiting',seg,model,(progress.attempt||1)>1?t('progress.retrySuffix',progress.attempt,progress.tries):'')
-  else if(progress.state==='next') label=completed<total?t('progress.next',completed+1):t('progress.done')
+  const sourceLabel=sourceProgressLabel(progress,t)
+  let label=sourceLabel||t('progress.generate')
+  if(!sourceLabel){
+    if(progress.phase==='coverage') label=t('progress.coverage',seg,model)
+    else if(progress.state==='rate_wait') label=t('progress.rateWait',seg,apiName,progress.delay||0)
+    else if(progress.state==='retry_wait') label=t('progress.retry',seg,apiName,progress.delay||0,progress.attempt||'',progress.tries||'')
+    else if(progress.state==='model_switch') label=t('progress.modelSwitch',seg,progress.model)
+    else if(progress.state==='key_switch') label=t('progress.keySwitch',seg)
+    else if(progress.state==='request') label=t('progress.waiting',seg,model,(progress.attempt||1)>1?t('progress.retrySuffix',progress.attempt,progress.tries):'')
+    else if(progress.state==='next') label=completed<total?t('progress.next',completed+1):t('progress.done')
+  }
   return <div className="generation-progress" role="progressbar" aria-label={label} aria-valuemin="0" aria-valuemax={total||undefined} aria-valuenow={total?completed:undefined}>
     <div className="generation-meta"><span className="generation-label">{label}</span><span className="generation-count">{total>0?`${completed} / ${total} · `:''}{clock}</span></div>
     <div className="generation-track"><span style={{transform:`scaleX(${ratio})`}}/></div>
@@ -252,7 +252,7 @@ export default function App() {
   const showSourceHint=!!source&&(isLocalMode?!compact:(!compact||url.trim()!==(result?.source_url||'').trim()))
   const errorNeedsImport=needsSubtitleImport(stream.error)
   // Bilibili 沒有字幕（或需要登入）時，才提供「下載音訊並在本機轉錄」這條路
-  const canDownloadAudio=!isLocalMode&&canOfferAudioDownload(source,stream.error)
+  const canDownloadAudio=!isLocalMode&&canOfferAudioDownload(source,stream.errorCode)
   const watchVideo=!isLocalMode&&watchAvailable?watchTarget(url):null
   const watchOffer=watchVideo&&<div className="no-caption-option"><span>{t('watch.offer')}</span><button type="button" className="btn-paper" onClick={()=>setWatching(true)}>{t('watch.open')}</button></div>
   const captionAction=errorNeedsImport?noCaptionAction(source,deepVisual,!!providers?.gemini?.configured):null

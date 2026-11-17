@@ -6,15 +6,24 @@ import { STRINGS } from '../src/i18n/strings.js'
 
 const read = path => readFileSync(new URL(path, import.meta.url), 'utf8')
 
-test('只有 Bilibili 的「沒有字幕／需要登入」才提供下載音訊', () => {
-  const noSubtitle = '這支 Bilibili 影片沒有可公開取得的字幕。如果你有，可以匯入 SRT／VTT 後再分析。'
-  const login = '這支 Bilibili 影片的字幕需要登入才能讀取。如果你有字幕檔，也可以匯入 SRT／VTT。'
-  assert.equal(canOfferAudioDownload('bilibili', noSubtitle), true)
-  assert.equal(canOfferAudioDownload('bilibili', login), true)
-  // 其他來源、其他錯誤（網路、分 P、SESSDATA 格式）都不能出現下載選項
-  assert.equal(canOfferAudioDownload('youtube', noSubtitle), false)
-  assert.equal(canOfferAudioDownload('bilibili', 'Bilibili 字幕下載失敗或遭到限制。'), false)
+test('只有 Bilibili 的「沒有字幕／需要登入」code 才提供下載音訊', () => {
+  assert.equal(canOfferAudioDownload('bilibili', 'bilibili_no_subtitle'), true)
+  assert.equal(canOfferAudioDownload('bilibili', 'bilibili_login_required'), true)
+  // 其他來源、其他錯誤（網路、分 P、SESSDATA 格式）都沒有 code，不能出現下載選項
+  assert.equal(canOfferAudioDownload('youtube', 'bilibili_no_subtitle'), false)
   assert.equal(canOfferAudioDownload('bilibili', ''), false)
+  assert.equal(canOfferAudioDownload('bilibili', 'bilibili_network_error'), false)
+  // 不再靠錯誤文字判斷：只有文字、沒有 code 就不顯示（登入過期那句不含 SRT）
+  assert.equal(canOfferAudioDownload('bilibili', '這支影片沒有可公開取得的字幕，可以匯入 SRT／VTT。'), false)
+})
+
+test('fatal 事件的 code 會被保留下來，前端不靠翻譯文字判斷', () => {
+  const hook = read('../src/hooks/useSummarizeStream.js')
+  assert.match(hook, /const \[errorCode, setErrorCode\] = useState\(''\)/)
+  assert.match(hook, /fatalCode = ev\.code \|\| ''/)
+  assert.match(hook, /setErrorCode\(fatalCode\)/)
+  const app = read('../src/App.jsx')
+  assert.match(app, /canOfferAudioDownload\(source,stream\.errorCode\)/)
 })
 
 test('下載音訊要按兩次確認，沒確認不會送出 allow_audio_download', () => {
@@ -26,7 +35,6 @@ test('下載音訊要按兩次確認，沒確認不會送出 allow_audio_downloa
 
   const app = read('../src/App.jsx')
   assert.match(app, /async function startAnalysis\(useVisual,allowAudio=false\)/)
-  assert.match(app, /canOfferAudioDownload\(source,stream\.error\)/)
   assert.match(app, /onConfirm=\{\(\)=>startAnalysis\(false,true\)\}/)
   assert.match(app, /stream\.summarize\(isLocalMode\?localUrl:url,activeProvider,useVisual,isLocalMode\?localVideo\?\.name:null,allowAudio\)/)
 })
