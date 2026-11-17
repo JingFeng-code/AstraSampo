@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createNoteMarkdown, markdownFilename, saveNoteMarkdown } from '../src/utils/notes-export.js'
+import { mergeClips, newClipId } from '../src/utils/clips.js'
 import { STRINGS } from '../src/i18n/strings.js'
 import { readFileSync } from 'node:fs'
 
@@ -113,5 +114,60 @@ test('複製 Markdown 的字串兩種語言都有', () => {
     assert.ok(t('notes.copyMarkdown'))
     assert.ok(t('notes.clipboardUnavailable'))
     assert.match(t('toast.copyFailed', 'denied'), /denied/)
+  }
+})
+
+test('匯出全部重點時，總結放在最前面', () => {
+  const md = createNoteMarkdown({
+    title: '影片',
+    clips: [{ heading: '卡片一', summary: '摘要', ts: 10 }],
+    overview: { summary: '整支影片的結論', points: ['第一條\n續行', '第二條'] },
+  })
+  const summaryAt = md.indexOf('## 總結')
+  const clipsAt = md.indexOf('## 學習重點')
+  assert.ok(summaryAt >= 0 && summaryAt < clipsAt, '總結要在學習重點之前')
+  assert.match(md, /## 總結\n\n整支影片的結論\n\n- 第一條 續行\n- 第二條/)
+  // 沒有總結時不要長出空段落
+  assert.doesNotMatch(createNoteMarkdown({ title: '影片', clips: [] }), /## 總結/)
+  assert.doesNotMatch(createNoteMarkdown({ title: '影片', overview: { summary: '', points: [] } }), /## 總結/)
+})
+
+test('匯出的重點依影片時間排序，沒有時間的排最後', () => {
+  const md = createNoteMarkdown({
+    title: '影片',
+    clips: [
+      { heading: '沒有時間 A', summary: 'x' },
+      { heading: '晚一點', summary: 'x', ts: 120 },
+      { heading: '最早', summary: 'x', ts: 5 },
+      { heading: '沒有時間 B', summary: 'x' },
+      { heading: '中間', summary: 'x', ts: 60 },
+    ],
+  })
+  const order = [...md.matchAll(/### (.+)/g)].map(m => m[1])
+  assert.deepEqual(order, ['最早', '中間', '晚一點', '沒有時間 A', '沒有時間 B'])
+})
+
+test('全部收進筆記只加一次，不會重複', () => {
+  const clip = (cardIndex, id) => ({ id, cardIndex, heading: `卡 ${cardIndex}` })
+  const first = mergeClips([], [clip(0, 'a0'), clip(1, 'a1'), clip(2, 'a2')])
+  assert.equal(first.length, 3)
+  // 再按一次：同一張卡不重複（clipAll 用同一個 mergeClips）
+  const again = mergeClips(first, [clip(0, 'b0'), clip(1, 'b1'), clip(2, 'b2')])
+  assert.equal(again.length, 3)
+  // 只有新的卡片會被加入，且保留原本的順序
+  const more = mergeClips(again, [clip(3, 'c3'), clip(0, 'c0')])
+  assert.deepEqual(more.map(c => c.cardIndex), [0, 1, 2, 3])
+  // 產生的 id 不能撞號
+  const ids = [newClipId(0), newClipId(0), newClipId(1)]
+  assert.equal(new Set(ids).size, ids.length)
+})
+
+test('新增的筆記按鈕文字兩種語言都有', () => {
+  for (const lang of Object.keys(STRINGS)) {
+    const t = translator(lang)
+    for (const key of ['notes.clipAll', 'notes.exportAll', 'notes.clear', 'notes.clearConfirm', 'notes.clearYes', 'notes.clearNo', 'toast.clippedNone', 'toast.notesCleared']) {
+      assert.ok(t(key), `${lang} 缺少 ${key}`)
+    }
+    assert.match(t('toast.clippedAll', 31), /31/)
   }
 })

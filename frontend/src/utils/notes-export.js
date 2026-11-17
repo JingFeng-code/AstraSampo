@@ -1,4 +1,6 @@
 // 沒有 Obsidian 的一般使用者，也能把已整理的重點留在自己的電腦。
+import { sortClipsByTime } from './clips.js'
+
 function oneLine(value) {
   return String(value || '').replace(/[\r\n]+/g, ' ').trim()
 }
@@ -8,15 +10,22 @@ export function markdownFilename(title) {
   return (base || 'AstraTube-notes') + '.md'
 }
 
-export function createNoteMarkdown({title, sourceUrl, clips = [], freeNote = ''}) {
+export function createNoteMarkdown({ title, sourceUrl, clips = [], freeNote = '', overview = null }) {
   const lines = ['# ' + (oneLine(title) || 'AstraTube 筆記'), '']
   if (sourceUrl) {
     // 不將任意輸入插入 Markdown link 語法，避免影片網址中含特殊括號。
     lines.push('來源：' + oneLine(sourceUrl), '')
   }
+  const points = (overview?.points || []).filter(point => oneLine(point))
+  if (overview && (oneLine(overview.summary) || points.length)) {
+    lines.push('## 總結', '')
+    if (oneLine(overview.summary)) lines.push(String(overview.summary).trim(), '')
+    for (const point of points) lines.push('- ' + oneLine(point))
+    if (points.length) lines.push('')
+  }
   if (clips.length) {
     lines.push('## 學習重點', '')
-    for (const clip of clips) {
+    for (const clip of sortClipsByTime(clips)) {
       lines.push('### ' + (oneLine(clip.heading) || '重點'))
       if (clip.ts != null && Number.isFinite(Number(clip.ts))) {
         const secs = Math.max(0, Math.floor(Number(clip.ts)))

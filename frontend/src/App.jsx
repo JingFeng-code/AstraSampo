@@ -176,19 +176,32 @@ export default function App() {
     }catch(e){showToast(e.message===t('error.pickNote')?e.message:t('toast.saveFailed',e.message),true)}
   }
 
-  function handleExportNotes(){
-    const title=filename||result?.title||t('note.summary')
-    const markdown=createNoteMarkdown({title,sourceUrl:noteSource,clips:cardsHook.clips,freeNote})
+  const noteTitle=()=>filename||result?.title||t('note.summary')
+  function saveNotesMarkdown(markdown){
     saveNoteMarkdown({
-      markdown, filename:markdownFilename(title), isDesktop:!!getDesktopConnection(), t,
+      markdown, filename:markdownFilename(noteTitle()), isDesktop:!!getDesktopConnection(), t,
       saveToBackend:exportNoteMarkdown,
       downloadInBrowser:downloadMarkdown,
     }).then(r=>{showToast(r.message,!r.ok);if(r.ok&&r.savedTo)setLastNoteSave(r.savedTo)})
   }
+  function handleExportNotes(){
+    saveNotesMarkdown(createNoteMarkdown({title:noteTitle(),sourceUrl:noteSource,clips:cardsHook.clips,freeNote}))
+  }
+  // 不必先收進筆記：總結＋全部卡片（依時間排序）＋隨手筆記一次匯出
+  function handleExportAllNotes(){
+    saveNotesMarkdown(createNoteMarkdown({title:noteTitle(),sourceUrl:noteSource,clips:cardsHook.allClips(),freeNote,overview:result?.overview}))
+  }
+  function handleClipAll(){
+    const added=cardsHook.clipAll()
+    showToast(added?t('toast.clippedAll',added):t('toast.clippedNone'))
+  }
+  function handleClearNotes(){
+    cardsHook.setClips([]); setFreeNote('')
+    showToast(t('toast.notesCleared'))
+  }
 
   async function handleCopyNotes(){
-    const title=filename||result?.title||t('note.summary')
-    const markdown=createNoteMarkdown({title,sourceUrl:noteSource,clips:cardsHook.clips,freeNote})
+    const markdown=createNoteMarkdown({title:noteTitle(),sourceUrl:noteSource,clips:cardsHook.clips,freeNote})
     try{
       if(!navigator.clipboard?.writeText)throw new Error(t('notes.clipboardUnavailable'))
       await navigator.clipboard.writeText(markdown)
@@ -284,7 +297,7 @@ export default function App() {
       {/* 筆記／問模型：可最小化浮窗，不佔用主版面，展開/收合狀態記在 localStorage */}
       {result&&<>
         <FloatingPanel id="notes" corner="br" title={t('panel.notes')} badge={cardsHook.clips.length||null} onToggle={min=>{if(min)setLastNoteSave(null)}}>
-          <NotesPanel onExport={handleExportNotes} onCopy={handleCopyNotes} lastSaved={lastNoteSave} vault={notes.vault} clips={cardsHook.clips} onClipNoteChange={cardsHook.updateClipNote} onRemoveClip={cardsHook.removeClip} freeNote={freeNote} setFreeNote={setFreeNote} filename={filename} setFilename={setFilename} onSave={handleSave} saving={notes.saving} folders={notes.folders} noteFiles={notes.noteFiles} saveOpts={notes.saveOpts} onSaveOptsChange={notes.onSaveOptsChange}/>
+          <NotesPanel onExport={handleExportNotes} onExportAll={handleExportAllNotes} onClipAll={handleClipAll} onClear={handleClearNotes} onCopy={handleCopyNotes} lastSaved={lastNoteSave} cardCount={cards.length} vault={notes.vault} clips={cardsHook.clips} onClipNoteChange={cardsHook.updateClipNote} onRemoveClip={cardsHook.removeClip} freeNote={freeNote} setFreeNote={setFreeNote} filename={filename} setFilename={setFilename} onSave={handleSave} saving={notes.saving} folders={notes.folders} noteFiles={notes.noteFiles} saveOpts={notes.saveOpts} onSaveOptsChange={notes.onSaveOptsChange}/>
         </FloatingPanel>
         <FloatingPanel id="ask" corner="bl" title={t('panel.ask')}>
           <AskPanel provider={activeProvider} videoId={result?.local_video_id?`local:${result.local_video_id}`:result?.youtube_video_id||(result?.bilibili_video_id?`bilibili:${result.bilibili_video_id}:p${result.bilibili_page||1}`:null)}/>
