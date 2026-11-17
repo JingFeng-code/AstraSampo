@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { hasOverview, matchOverviewPoint, readDeckTab, resolveDeckTab, writeDeckTab } from '../src/utils/deck-tabs.js'
+import { deckShortcutsEnabled, hasOverview, matchOverviewPoint, readDeckTab, resolveDeckTab, writeDeckTab } from '../src/utils/deck-tabs.js'
 import { STRINGS } from '../src/i18n/strings.js'
 
 const read = path => readFileSync(new URL(path, import.meta.url), 'utf8')
@@ -78,6 +78,32 @@ test('CardDeck 用分頁呈現，重點分頁不再渲染總結', () => {
   assert.doesNotMatch(deck, /onKeyDown/)
   // 0 張卡時維持原本的總結畫面
   assert.match(deck, /deck-empty[\s\S]*?deck-overview/)
+})
+
+test('在「總結」分頁按左右鍵與 N 不會操作看不到的卡片', () => {
+  const overview = { summary: '總結' }
+  // 重點分頁：快捷鍵照舊
+  assert.equal(deckShortcutsEnabled('cards', 31, overview), true)
+  // 總結分頁：索引與筆記都不該變動
+  assert.equal(deckShortcutsEnabled('overview', 31, overview), false)
+  // 沒有總結內容就沒有總結分頁，快捷鍵不受影響
+  assert.equal(deckShortcutsEnabled('overview', 31, null), true)
+  // 沒有任何卡片時本來就不作用
+  assert.equal(deckShortcutsEnabled('cards', 0, overview), false)
+
+  // App 的鍵盤處理要真的問過分頁狀態；CardDeck 要把目前分頁回報上去
+  const app = read('../src/App.jsx')
+  assert.match(app, /deckShortcutsEnabled\(deckTabRef\.current,cards\.length,result\?\.overview\)/)
+  assert.match(app, /onTabChange=\{tab=>\{deckTabRef\.current=tab\}\}/)
+  const deck = read('../src/components/CardDeck.jsx')
+  assert.match(deck, /onTabChange\?\.\(tab\)/)
+})
+
+test('卡片區的分頁叫「卡片」，和上層的「重點」分開', () => {
+  assert.equal(STRINGS.zh['deck.tabCards'], '卡片')
+  assert.equal(STRINGS.en['deck.tabCards'], 'Cards')
+  assert.equal(STRINGS.zh['deck.tabOverview'], '總結')
+  assert.equal(STRINGS.en['deck.tabOverview'], 'Summary')
 })
 
 test('分頁文字兩種語言都有', () => {

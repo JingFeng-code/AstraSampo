@@ -24,6 +24,12 @@ export function writeDeckTab(storage, tab) {
   }
 }
 
+// 在「總結」分頁時，左右鍵與 N 不該操作看不到的卡片（索引與筆記都不會動）
+export function deckShortcutsEnabled(tab, cardCount, overview) {
+  if (!cardCount) return false
+  return !(tab === 'overview' && hasOverview(overview))
+}
+
 // 換一支影片就回到重點：舊分頁是上一支影片的選擇，不能沿用
 // （同一個 result 物件＝重新整理或換卡，保留使用者當下的選擇）
 export function resolveDeckTab(previousResult, nextResult, tab) {

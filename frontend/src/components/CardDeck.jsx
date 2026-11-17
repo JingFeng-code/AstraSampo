@@ -7,7 +7,7 @@ import { useI18n } from '../i18n/index.jsx'
 // 重點數量多時把導覽縮小排密，避免撐破標題列
 const COMPACT_FROM = 24
 
-export default function CardDeck({ result, index, setIndex, clippedIds, onClip, onJumpVideo, deepdives, onDeepDive, deepdiveLoading, onImplement, fullWidth }) {
+export default function CardDeck({ result, index, setIndex, clippedIds, onClip, onJumpVideo, deepdives, onDeepDive, deepdiveLoading, onImplement, fullWidth, onTabChange }) {
   const { t } = useI18n()
   const cards=result.cards||[], card=cards[index]
   const dotsRef=useRef(null), deckRef=useRef(null)
@@ -23,7 +23,7 @@ export default function CardDeck({ result, index, setIndex, clippedIds, onClip, 
     firstResult.current=result
     if(next!==tab)setTab(next)
   },[result])
-  useEffect(()=>{writeDeckTab(storage,tab)},[tab])
+  useEffect(()=>{writeDeckTab(storage,tab);onTabChange?.(tab)},[tab])
   // 圓點列可橫向捲動，切換卡片時把目前的圓點帶進視野
   useEffect(()=>{
     const el=dotsRef.current?.children[index]

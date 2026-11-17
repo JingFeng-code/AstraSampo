@@ -162,7 +162,7 @@ export const STRINGS = {
 
     'deck.overview': 'Overview',
     'deck.tabs': 'Key points and summary',
-    'deck.tabCards': 'Key points',
+    'deck.tabCards': 'Cards',
     'deck.tabOverview': 'Summary',
     'deck.fallbackNote': 'The model returned no analysis this time; this card is taken from the transcript.',
     'deck.jumpPlay': 'Jump here and play',
@@ -584,7 +584,7 @@ export const STRINGS = {
 
     'deck.overview': '總結',
     'deck.tabs': '重點與總結',
-    'deck.tabCards': '重點',
+    'deck.tabCards': '卡片',
     'deck.tabOverview': '總結',
     'deck.fallbackNote': '這次模型沒有給出分析，以下直接取逐字稿內容。',
     'deck.jumpPlay': '跳到這裡並播放',
