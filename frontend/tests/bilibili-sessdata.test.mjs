@@ -21,7 +21,8 @@ test('一般儲存欄位空白時不送 bilibili_sessdata，不會誤刪', () =>
 
 test('移除成功／失敗都有回饋，說明文字和實際行為一致', () => {
   const modal = read('../src/components/SettingsModal.jsx')
-  assert.match(modal, /setCookieMsg\(t\('settings\.bilibiliRemoveDone'\)\)/)
+  // 成功訊息改由 applyPartialSettings 寫進 setCookieMsg（不關閉視窗）
+  assert.match(modal, /message: t\('settings\.bilibiliRemoveDone'\)/)
   assert.match(modal, /setCookieErr\(t\('settings\.bilibiliRemoveFailed', e\.message\)\)/)
   for (const [lang, table] of Object.entries(STRINGS)) {
     for (const key of ['settings.bilibiliRemove', 'settings.bilibiliRemoving', 'settings.bilibiliRemoveDone']) {

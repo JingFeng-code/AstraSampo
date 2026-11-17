@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import * as api from '../api.js'
 import { useI18n } from '../i18n/index.jsx'
+import { applyPartialSettings } from '../utils/settings-partial.js'
 import { PROVIDER_ORDER, providerValue } from '../hooks/useModels.js'
 import { aiConnectionStatus, connectionCheckTarget } from '../utils/ai-source.js'
 
@@ -25,7 +26,7 @@ function sourceParts(value = 'smart') {
     { engine: value.slice(0, colon), model: value.slice(colon + 1) }
 }
 
-export default function SettingsModal({ state, mandatory, focus, onClose, onSaved, provider='smart', providers={}, onProviderChange }) {
+export default function SettingsModal({ state, mandatory, focus, onClose, onSaved, provider='smart', providers={}, onProviderChange, onSettingsChanged }) {
   const { t, lang, setLang, langs } = useI18n()
   const initial = sourceParts(provider)
   const [engine, setEngine] = useState(initial.engine)
@@ -157,8 +158,8 @@ export default function SettingsModal({ state, mandatory, focus, onClose, onSave
     try {
       const next = await api.importBilibiliCookie(browser)
       const label = browsers.find(b => b.browser === browser)?.label || browser
-      setCookieMsg(t('settings.bilibiliImportDone', label))
-      onSaved?.(next)
+      applyPartialSettings({ next, message: t('settings.bilibiliImportDone', label),
+        onChanged: onSettingsChanged, setMessage: setCookieMsg, setError: setCookieErr })
     } catch (e) {
       setCookieErr(e.message)
     } finally {
@@ -173,8 +174,8 @@ export default function SettingsModal({ state, mandatory, focus, onClose, onSave
       // 明確送空字串：後端只有收到空字串才會清掉，欄位空白不會
       const next = await api.saveSettings({ bilibili_sessdata: '' })
       setSessdata('')
-      setCookieMsg(t('settings.bilibiliRemoveDone'))
-      onSaved?.(next)
+      applyPartialSettings({ next, message: t('settings.bilibiliRemoveDone'),
+        onChanged: onSettingsChanged, setMessage: setCookieMsg, setError: setCookieErr })
     } catch (e) {
       setCookieErr(t('settings.bilibiliRemoveFailed', e.message))
     } finally {
