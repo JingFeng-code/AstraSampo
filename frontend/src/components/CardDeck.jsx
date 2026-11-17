@@ -68,12 +68,17 @@ export default function CardDeck({ result, index, setIndex, clippedIds, onClip, 
   return (
     <section className={`deck ${fullWidth?'deck-full':''}`} ref={deckRef}>
       <div className="deck-head">
-        <h2 className="deck-title">{result.title}</h2>
-        {result.model_used&&<span className="model-badge" title={t('deck.modelTitle')}>{result.model_used}{result.segments>1?t('deck.segments',result.segments):''}</span>}
-        {sourceKey&&<span className="model-badge" title={t('deck.sourceTitle')}>{t(sourceKey)}</span>}
-        <span className="deck-count">{t('deck.count',index+1,cards.length)}</span>
-        {/* 實作的對象是整支影片，不是單張卡——所以按鈕在標題列，不在卡片上 */}
-        <details className="deck-advanced"><summary>{t('ai.advancedTools')}</summary><button className="btn-implement" onClick={onImplement} title={t('implement.ctaTitle')}>{t(`implement.cta.${suggestedTrack}`)}</button></details>
+        <h2 className="deck-title" title={result.title}>{result.title}</h2>
+        <div className="deck-meta">
+          {/* 只有模型名稱會在最擠的時候被省略；滑鼠移上去可看全文，
+              鍵盤聚焦目前看不到（瀏覽器不會在聚焦時顯示 title 提示） */}
+          {result.model_used&&<span className="model-badge" title={`${t('deck.modelTitle')}：${result.model_used}${result.segments>1?t('deck.segments',result.segments):''}`}>{result.model_used}{result.segments>1?t('deck.segments',result.segments):''}</span>}
+          {/* 來源標籤字數少，不該跟著模型名稱一起被截斷 */}
+          {sourceKey&&<span className="model-badge deck-source" title={t('deck.sourceTitle')}>{t(sourceKey)}</span>}
+          <span className="deck-count">{t('deck.count',index+1,cards.length)}</span>
+          {/* 實作的對象是整支影片，不是單張卡——所以按鈕在標題列，不在卡片上 */}
+          <details className="deck-advanced"><summary>{t('ai.advancedTools')}</summary><button className="btn-implement" onClick={onImplement} title={t('implement.ctaTitle')}>{t(`implement.cta.${suggestedTrack}`)}</button></details>
+        </div>
       </div>
       {showTabs&&<div className="deck-tabs" role="tablist" aria-label={t('deck.tabs')}>
         <button type="button" role="tab" id="deck-tab-cards" className="deck-tab" aria-selected={tab==='cards'} aria-controls="deck-panel-cards" onClick={()=>setTab('cards')}>{t('deck.tabCards')}</button>
