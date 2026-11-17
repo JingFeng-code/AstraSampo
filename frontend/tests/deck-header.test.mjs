@@ -30,3 +30,13 @@ test('CSS：來源標籤不縮、模型名稱先縮，底部留白蓋不住卡�
   assert.match(css, /\.deck\{[^}]*padding-bottom:88px/)
   assert.match(css, /\.workspace-split \.deck\{overflow-y:auto;padding-bottom:104px\}/)
 })
+
+
+test('窄版允許整列換行，寬版維持一行', () => {
+  const css = read('../src/index.css')
+  // 寬版：一行，空間不夠時只有模型名稱收窄
+  assert.match(css, /\.deck-meta\{[^}]*flex-wrap:nowrap\}/)
+  // 窄版：整組可以換行；英文介面的來源標籤（Deep visual + captions）比中文長
+  assert.match(css, /@media\(max-width:480px\)\{\s*\.deck-meta\{flex-wrap:wrap\}/)
+  assert.match(css, /\.deck-meta \.deck-source\{flex-shrink:0[^}]*\}/)
+})

@@ -175,6 +175,11 @@ button:disabled{cursor:not-allowed}
 /* 空間真的不夠時先讓模型名稱用省略號收窄（滑鼠移上去看得到全文；鍵盤聚焦沒有提示），
    來源、張數與進階工具一律保留完整 */
 .deck-meta .model-badge{flex:0 1 auto}
+/* 窄版允許整組換行：英文介面的來源標籤（例如 Deep visual + captions）比中文長，
+   硬塞一行會把張數推出可視範圍 */
+@media(max-width:480px){
+  .deck-meta{flex-wrap:wrap}
+}
 .deck-count{margin-left:auto;color:var(--text-faint);font:600 12px/1 var(--mono);font-variant-numeric:tabular-nums;flex-shrink:0}
 .model-badge{max-width:100%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border:1px solid var(--border);border-radius:var(--radius-small);background:var(--surface-2);color:var(--text);padding:4px 7px;font:600 12px/1.2 var(--mono)}
 /* 來源標籤很短（例如「陪看模式」），任何寬度下都要完整顯示 */
