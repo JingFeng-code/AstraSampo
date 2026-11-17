@@ -21,6 +21,7 @@ import { DEEP_VISUAL_KEY, deepVisualNotice, effectiveDeepVisual, isBilibiliUrl }
 import { detectSource, needsSubtitleImport, noCaptionAction, sourceHintKey } from './utils/source-info.js'
 import { createNoteMarkdown, downloadMarkdown, markdownFilename, saveNoteMarkdown } from './utils/notes-export.js'
 import { NARROW_QUERY, effectiveResultTab, resultTabs } from './utils/result-tabs.js'
+import { deckShortcutsEnabled } from './utils/deck-tabs.js'
 import { isVideoFile, localVideoId, localVideoUrl } from './utils/local-video.js'
 import { watchTarget } from './utils/watch.js'
 import WatchAlong from './components/WatchAlong.jsx'
@@ -196,7 +197,9 @@ export default function App() {
     }catch(e){showToast(t('toast.copyFailed',e?.message||String(e)),true)}
   }
 
-  useEffect(()=>{function onKey(e){const tag=document.activeElement?.tagName;if(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT')return;if(!cards.length)return;if(e.key==='ArrowRight')cardsHook.jumpToCard(Math.min(cardsHook.index+1,cards.length-1),false);else if(e.key==='ArrowLeft')cardsHook.jumpToCard(Math.max(cardsHook.index-1,0),false);else if(e.key.toLowerCase()==='n')clipCard(cardsHook.index)};window.addEventListener('keydown',onKey);return()=>window.removeEventListener('keydown',onKey)})
+  // 重點區目前在哪個分頁：在「總結」分頁時快捷鍵不能偷偷操作看不到的卡片
+  const deckTabRef=useRef('cards')
+  useEffect(()=>{function onKey(e){const tag=document.activeElement?.tagName;if(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT')return;if(!deckShortcutsEnabled(deckTabRef.current,cards.length,result?.overview))return;if(e.key==='ArrowRight')cardsHook.jumpToCard(Math.min(cardsHook.index+1,cards.length-1),false);else if(e.key==='ArrowLeft')cardsHook.jumpToCard(Math.max(cardsHook.index-1,0),false);else if(e.key.toLowerCase()==='n')clipCard(cardsHook.index)};window.addEventListener('keydown',onKey);return()=>window.removeEventListener('keydown',onKey)})
 
   const vc=!notes.vault.configured?{cls:'warn',text:t('vault.notConfigured')}:!notes.vault.exists?{cls:'warn',text:t('vault.missing')}:{cls:'ok',text:t('vault.connected')}
 
@@ -279,7 +282,7 @@ export default function App() {
       <main className={`workspace ${splitLayout?'workspace-split':''}`} data-result-tab={splitLayout&&narrow?activeTab:undefined} ref={workspaceRef}>
         {watching&&watchVideo?<WatchAlong key={`${watchVideo.platform}:${watchVideo.videoId}:${watchVideo.page}`} target={watchVideo} provider={activeProvider} onFinished={finishWatching} onClose={()=>setWatching(false)}/>:stream.loading?<div className="loading-space" aria-hidden="true"/>
         :!result?<div className="empty-state"><span className="empty-logo"><BrandMark/><strong>{t('app.name')}</strong></span><p className="empty-tagline">{t('app.tagline')}</p><ol className="empty-steps"><li>{t('empty.step1')}</li><li>{t('empty.step2')}</li><li>{t('empty.step3')}</li></ol></div>
-        :<>{hasVideo&&<VideoPane localSrc={localVideo?.id===result.local_video_id?localVideo.src:null} onPickLocal={()=>localPickerRef.current?.click()} videoId={isLocalResult?result.local_video_id:isBilibili?result.bilibili_video_id:result.youtube_video_id} platform={isLocalResult?'local':isBilibili?'bilibili':'youtube'} page={result.bilibili_page||1} provider={activeProvider} subtitleRevision={subtitleRevision} startAt={cardsHook.startAt} cards={cards} activeIndex={cardsHook.index} onJump={i=>cardsHook.jumpToCard(i,true)} tabs={resultTabs(narrow)} tab={activeTab} onTabChange={setResultTab}/>}{hasVideo&&<Splitter onCommit={setSplit}/>}<CardDeck result={result} index={cardsHook.index} setIndex={cardsHook.setIndex} clippedIds={cardsHook.clippedIds} onClip={clipCard} onJumpVideo={i=>cardsHook.jumpToCard(i,true)} deepdives={cardsHook.deepdives} onDeepDive={onDeepDive} deepdiveLoading={cardsHook.ddLoading} onImplement={implement.start} fullWidth={!hasVideo} /></>}
+        :<>{hasVideo&&<VideoPane localSrc={localVideo?.id===result.local_video_id?localVideo.src:null} onPickLocal={()=>localPickerRef.current?.click()} videoId={isLocalResult?result.local_video_id:isBilibili?result.bilibili_video_id:result.youtube_video_id} platform={isLocalResult?'local':isBilibili?'bilibili':'youtube'} page={result.bilibili_page||1} provider={activeProvider} subtitleRevision={subtitleRevision} startAt={cardsHook.startAt} cards={cards} activeIndex={cardsHook.index} onJump={i=>cardsHook.jumpToCard(i,true)} tabs={resultTabs(narrow)} tab={activeTab} onTabChange={setResultTab}/>}{hasVideo&&<Splitter onCommit={setSplit}/>}<CardDeck result={result} index={cardsHook.index} setIndex={cardsHook.setIndex} clippedIds={cardsHook.clippedIds} onClip={clipCard} onJumpVideo={i=>cardsHook.jumpToCard(i,true)} deepdives={cardsHook.deepdives} onDeepDive={onDeepDive} deepdiveLoading={cardsHook.ddLoading} onImplement={implement.start} fullWidth={!hasVideo} onTabChange={tab=>{deckTabRef.current=tab}} /></>}
       </main>
       {/* 筆記／問模型：可最小化浮窗，不佔用主版面，展開/收合狀態記在 localStorage */}
       {result&&<>

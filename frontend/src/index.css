@@ -603,6 +603,13 @@ button:disabled{cursor:not-allowed}
 .deck-overview-title{margin:0 0 6px;font-size:13px;letter-spacing:.08em;color:var(--muted)}
 .deck-overview p{margin:0 0 8px;line-height:1.75}
 .deck-overview .summary-list{margin:0;padding-left:1.2em}
+/* 重點／總結分頁：總結不再壓在每張卡上方，切換卡片後第一眼看到的就是卡片 */
+.deck-tabs{align-self:flex-start;display:flex;gap:2px;margin:0 0 12px;padding:3px;border:1px solid var(--border);border-radius:var(--radius-control);background:var(--surface-2)}
+.deck-tab{min-height:32px;padding:4px 16px;border:0;border-radius:calc(var(--radius-control) - 3px);background:none;color:var(--text-faint);font-size:13px;font-weight:750;white-space:nowrap}
+.deck-tab[aria-selected=true]{background:var(--surface);color:var(--text);box-shadow:var(--shadow)}
+.deck-tab:hover:not([aria-selected=true]){color:var(--text)}
+.overview-link{display:inline;padding:0;border:0;background:none;color:var(--accent);font:inherit;text-align:left;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.overview-link:hover{color:var(--accent-hover)}
 
 /* 保底卡（模型沒有給分析）的說明，避免把實作細節寫進標題 */
 .card-fallback-note{margin:-4px 0 10px;font-size:12.5px;color:var(--text-faint)}
