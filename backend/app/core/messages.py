@@ -91,6 +91,10 @@ MESSAGES: dict[str, dict[str, str]] = {
         "zh-Hant": "無法寫入筆記檔：{error}",
         "en": "Could not write the note file: {error}",
     },
+    "notes.export_too_many": {
+        "zh-Hant": "同名的筆記檔太多，已停止匯出。請先整理「下載」資料夾裡的 AstraTube 筆記再試一次。",
+        "en": "Too many notes with the same name, so exporting stopped. Tidy up the AstraTube notes in your Downloads folder and try again.",
+    },
 
     # ── 問模型 ──────────────────────────────────────────────
     "ask.no_transcript": {

@@ -4,6 +4,7 @@
 """
 import os
 import sys
+import threading
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -146,11 +147,67 @@ def test_unwritable_downloads_falls_back_to_program_folder():
         assert saved.read_text(encoding="utf-8") == "退路\n"
 
 
+def test_concurrent_same_name_exports_keep_both_files():
+    """兩個匯出幾乎同時進來時不能挑到同一個路徑互相覆蓋（排他開檔）。"""
+    with TemporaryDirectory() as tmp, patch.dict(os.environ, CLEAN_ENV):
+        folder = Path(tmp) / "Downloads" / "AstraTube"
+        folder.mkdir(parents=True)
+        barrier = threading.Barrier(2)
+        real_candidate = notes._candidate_path
+
+        def sync_first_attempt(target, base, attempt):
+            path = real_candidate(target, base, attempt)
+            if attempt == 1:
+                # 兩邊都挑完同一個路徑才進寫入，重現「檢查完存在、還沒寫」的時間差
+                barrier.wait(timeout=10)
+            return path
+
+        results, errors = [], []
+
+        def worker(text):
+            try:
+                results.append(notes._write_export(folder, "同名", text))
+            except BaseException as exc:  # noqa: BLE001 - 測試要把任何失敗都收集起來
+                errors.append(exc)
+
+        with patch.object(notes, "_candidate_path", sync_first_attempt):
+            threads = [threading.Thread(target=worker, args=("第一份",)),
+                       threading.Thread(target=worker, args=("第二份",))]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join(timeout=15)
+
+        assert not errors, errors
+        assert len(results) == 2
+        assert len({str(p) for p in results}) == 2, "兩次匯出不能寫進同一個檔"
+        assert sorted(p.name for p in results) == ["同名 (2).md", "同名.md"]
+        assert sorted(p.read_text(encoding="utf-8") for p in results) == ["第一份\n", "第二份\n"]
+
+
+def test_export_gives_up_after_too_many_duplicates():
+    """撞名次數超過上限要回明確錯誤，不能無限重試。"""
+    with TemporaryDirectory() as tmp, patch.dict(os.environ, CLEAN_ENV):
+        base = Path(tmp)
+        folder = base / "Downloads" / "AstraTube"
+        folder.mkdir(parents=True)
+        (folder / "同名.md").write_text("舊檔", encoding="utf-8")
+        (folder / "同名 (2).md").write_text("舊檔", encoding="utf-8")
+        with patch.object(notes, "_EXPORT_RETRIES", 2),                 patch.multiple(notes, _downloads_root=lambda: base / "Downloads",
+                               _exports_root=lambda: base / "program" / "exports"):
+            res = post_export(client(), "同名", "內容")
+        assert res.status_code == 500, res.text
+        assert "同名" in res.json()["detail"], res.json()
+        assert sorted(p.name for p in folder.iterdir()) == ["同名 (2).md", "同名.md"], "失敗時不得留下新檔"
+
+
 if __name__ == "__main__":
     test_normal_export_writes_utf8_file_in_downloads()
     test_same_name_does_not_overwrite()
     test_hostile_filenames_stay_inside_target_folder()
     test_downloads_folder_uses_windows_known_folder_when_available()
+    test_concurrent_same_name_exports_keep_both_files()
+    test_export_gives_up_after_too_many_duplicates()
     test_oversized_markdown_is_rejected()
     test_only_requests_from_this_computer_are_accepted()
     test_unwritable_downloads_falls_back_to_program_folder()

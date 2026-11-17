@@ -113,7 +113,6 @@ def _exports_root() -> Path:
 # 控制字元（含 NUL、換行、Tab）會讓部分平台的開檔直接失敗；它們不是檔名的一部分
 _CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
 
-
 def _export_name(name: str) -> str:
     """匯出檔名：只取名稱本身（不含路徑與副檔名），長度留給「 (2)」這種後綴。"""
     base = _safe_name(_CONTROL_CHARS.sub("", name or "").replace(os.sep, " ").replace("/", " "))
@@ -124,23 +123,42 @@ def _export_name(name: str) -> str:
     return base[:110] or "AstraTube-notes"
 
 
-def _unique_path(folder: Path, base: str) -> Path:
-    """同名時加 (2)、(3)…，不覆蓋使用者既有的筆記。"""
-    path = folder / f"{base}.md"
-    _ensure_within(folder, path)
-    i = 2
-    while path.exists():
-        path = folder / f"{base} ({i}).md"
-        _ensure_within(folder, path)
-        i += 1
-    return path
+# 同名上限：正常情況不會撞這麼多；上限只是避免無限重試
+_EXPORT_RETRIES = 1000
+
+
+def _candidate_path(folder: Path, base: str, attempt: int) -> Path:
+    """第 attempt 個候選路徑（1 是原名，之後依序加 (2)、(3)…），一律確認在目標資料夾內。"""
+    name = f"{base}.md" if attempt == 1 else f"{base} ({attempt}).md"
+    return _ensure_within(folder, folder / name)
 
 
 def _write_export(folder: Path, base: str, text: str) -> Path:
+    """以排他模式建立檔案。
+
+    先「檢查有沒有同名、再寫檔」會有時間差：兩個匯出幾乎同時進來時會挑到同一個路徑，
+    後寫的把先寫的截斷。改用 open(..., "x") 讓作業系統保證只有一個成功，撞到就換下一個後綴。
+    """
     folder.mkdir(parents=True, exist_ok=True)
-    path = _unique_path(folder, base)
-    path.write_text(text if text.endswith("\n") else text + "\n", encoding="utf-8")
-    return path
+    payload = text if text.endswith("\n") else text + "\n"
+    for attempt in range(1, _EXPORT_RETRIES + 1):
+        path = _candidate_path(folder, base, attempt)
+        try:
+            handle = open(path, "x", encoding="utf-8", newline="")
+        except FileExistsError:
+            continue
+        try:
+            with handle:
+                handle.write(payload)
+        except BaseException:
+            # 寫到一半失敗：把自己剛建立的空檔／半檔刪掉，不要留下壞檔案
+            try:
+                path.unlink()
+            except OSError:
+                pass
+            raise
+        return path
+    raise HTTPException(500, messages.t("notes.export_too_many"))
 
 
 def _ensure_within(root: Path, target: Path) -> Path:
