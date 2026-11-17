@@ -20,6 +20,7 @@ import { useI18n } from './i18n/index.jsx'
 import { DEEP_VISUAL_KEY, deepVisualNotice, effectiveDeepVisual, isBilibiliUrl } from './utils/user-mode.js'
 import { detectSource, needsSubtitleImport, noCaptionAction, sourceHintKey } from './utils/source-info.js'
 import { createNoteMarkdown, downloadMarkdown, markdownFilename, saveNoteMarkdown } from './utils/notes-export.js'
+import { noteVideoKey, resolveNoteFilename } from './utils/note-filename.js'
 import { NARROW_QUERY, effectiveResultTab, resultTabs } from './utils/result-tabs.js'
 import { deckShortcutsEnabled } from './utils/deck-tabs.js'
 import { isVideoFile, localVideoId, localVideoUrl } from './utils/local-video.js'
@@ -91,6 +92,8 @@ export default function App() {
   const setSplit=v=>{setSplitRaw(v);try{localStorage.setItem(SPKEY,String(v))}catch{}}
   useLayoutEffect(()=>{workspaceRef.current?.style.setProperty('--split',String(split))},[split])
   const [freeNote,setFreeNote]=useState(SAVED.freeNote||''), [filename,setFilename]=useState(SAVED.filename||'')
+  // 檔名是不是使用者自己改的：改過就只在同一支影片內沿用，換影片要換新標題
+  const [filenameMeta,setFilenameMeta]=useState(()=>SAVED.filenameMeta||{videoKey:'',edited:false})
   const [showSettings,setShowSettings]=useState(false)
   const [settingsFocus,setSettingsFocus]=useState(null)
   const [subtitleRevision,setSubtitleRevision]=useState(0)
@@ -115,12 +118,22 @@ export default function App() {
   const notes = useNotesVault(SAVED.saveOpts)
   const implement = useImplement({ result, provider: activeProvider, t })
 
-  // 摘要標題一到就當作預設檔名
-  useEffect(()=>{ if(result?.title) setFilename(f=>f||result.title) },[result?.title])
+  // 摘要標題一到就當作預設檔名；同一支影片內手動改過的值不會被蓋掉
+  useEffect(()=>{
+    if(!result?.title)return
+    const next=resolveNoteFilename(
+      {filename,videoKey:filenameMeta.videoKey,edited:filenameMeta.edited},
+      {title:result.title,key:noteVideoKey(result,url)},
+    )
+    if(next.filename!==filename)setFilename(next.filename)
+    if(next.videoKey!==filenameMeta.videoKey||next.edited!==filenameMeta.edited)setFilenameMeta({videoKey:next.videoKey,edited:next.edited})
+  },[result?.title,result?.source_url,result?.youtube_video_id,result?.bilibili_video_id,result?.local_video_id])
+  // 手動編輯後標記起來，接下來切卡片、收合面板、重新整理都保留
+  function changeFilename(value){setFilename(value);setFilenameMeta(m=>({...m,edited:true}))}
   // 工作階段持久化：任何整理狀態改變就寫回 localStorage
   useEffect(()=>{
-    try{localStorage.setItem(SKEY,JSON.stringify({url,sourceMode,localVideo:localVideo?{id:localVideo.id,name:localVideo.name}:null,provider,result,index:cardsHook.index,deepdives:cardsHook.deepdives,clips:cardsHook.clips,freeNote,filename,saveOpts:notes.saveOpts}))}catch{}
-  },[url,sourceMode,localVideo?.id,localVideo?.name,provider,result,cardsHook.index,cardsHook.deepdives,cardsHook.clips,freeNote,filename,notes.saveOpts])
+    try{localStorage.setItem(SKEY,JSON.stringify({url,sourceMode,localVideo:localVideo?{id:localVideo.id,name:localVideo.name}:null,provider,result,index:cardsHook.index,deepdives:cardsHook.deepdives,clips:cardsHook.clips,freeNote,filename,filenameMeta,saveOpts:notes.saveOpts}))}catch{}
+  },[url,sourceMode,localVideo?.id,localVideo?.name,provider,result,cardsHook.index,cardsHook.deepdives,cardsHook.clips,freeNote,filename,filenameMeta,notes.saveOpts])
 
   function handleSettingsSaved(next){
     setSettings(next)
@@ -302,7 +315,7 @@ export default function App() {
       {/* 筆記／問模型：可最小化浮窗，不佔用主版面，展開/收合狀態記在 localStorage */}
       {result&&<>
         <FloatingPanel id="notes" corner="br" title={t('panel.notes')} badge={cardsHook.clips.length||null} onToggle={min=>{if(min)setLastNoteSave(null)}}>
-          <NotesPanel onExport={handleExportNotes} onExportAll={handleExportAllNotes} onClipAll={handleClipAll} onClear={handleClearNotes} onCopy={handleCopyNotes} lastSaved={lastNoteSave} cardCount={cards.length} vault={notes.vault} clips={cardsHook.clips} onClipNoteChange={cardsHook.updateClipNote} onRemoveClip={cardsHook.removeClip} freeNote={freeNote} setFreeNote={setFreeNote} filename={filename} setFilename={setFilename} onSave={handleSave} saving={notes.saving} folders={notes.folders} noteFiles={notes.noteFiles} saveOpts={notes.saveOpts} onSaveOptsChange={notes.onSaveOptsChange}/>
+          <NotesPanel onExport={handleExportNotes} onExportAll={handleExportAllNotes} onClipAll={handleClipAll} onClear={handleClearNotes} onCopy={handleCopyNotes} lastSaved={lastNoteSave} cardCount={cards.length} vault={notes.vault} clips={cardsHook.clips} onClipNoteChange={cardsHook.updateClipNote} onRemoveClip={cardsHook.removeClip} freeNote={freeNote} setFreeNote={setFreeNote} filename={filename} setFilename={changeFilename} onSave={handleSave} saving={notes.saving} folders={notes.folders} noteFiles={notes.noteFiles} saveOpts={notes.saveOpts} onSaveOptsChange={notes.onSaveOptsChange}/>
         </FloatingPanel>
         <FloatingPanel id="ask" corner="bl" title={t('panel.ask')}>
           <AskPanel provider={activeProvider} videoId={result?.local_video_id?`local:${result.local_video_id}`:result?.youtube_video_id||(result?.bilibili_video_id?`bilibili:${result.bilibili_video_id}:p${result.bilibili_page||1}`:null)}/>

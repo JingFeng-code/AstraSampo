@@ -29,7 +29,10 @@ export default function NotesPanel({ vault, clips, cardCount = 0, onClipNoteChan
       <textarea className="free-note" placeholder={t('notes.free')} value={freeNote} onChange={e=>setFreeNote(e.target.value)}/>
 
 
-      {!vault.configured&&<input className="fname" type="text" placeholder={t('notes.filename')} value={filename} onChange={e=>setFilename(e.target.value)}/>}
+      {!vault.configured&&<label className="cfg-row notes-filename">
+        <span className="cfg-label">{t('notes.filenameLabel')}</span>
+        <input className="fname" type="text" placeholder={t('notes.filename')} value={filename} onChange={e=>setFilename(e.target.value)}/>
+      </label>}
       {vault.configured&&(
         <div className="save-config">
           <label className="cfg-row">
@@ -52,7 +55,10 @@ export default function NotesPanel({ vault, clips, cardCount = 0, onClipNoteChan
               </select>
             </label>
           ):(
-            <input className="fname" type="text" placeholder={t('notes.filename')} value={filename} onChange={e=>setFilename(e.target.value)}/>
+            <label className="cfg-row notes-filename">
+              <span className="cfg-label">{t('notes.filenameLabel')}</span>
+              <input className="fname" type="text" placeholder={t('notes.filename')} value={filename} onChange={e=>setFilename(e.target.value)}/>
+            </label>
           )}
           {isAppend&&noteFiles.length===0&&<p className="cfg-note">{t('notes.emptyFolder')}</p>}
         </div>
