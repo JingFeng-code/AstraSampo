@@ -263,6 +263,54 @@ def test_fatal_events_have_no_code_for_other_errors():
         assert fatal and "code" not in fatal[0], fatal[0]
 
 
+def test_cancel_during_whisper_fallback_stops_and_removes_temp_dir():
+    """SenseVoice 不可用時的 Whisper 備援也要能取消。"""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmpdir = Path(tmp) / "audio"
+        tmpdir.mkdir()
+        seen = {}
+        state = {"cancel": False}
+
+        def fake_sensevoice(path, cancelled=None):
+            state["cancel"] = True   # 模擬使用者在 SenseVoice 階段按下停止
+            return None
+
+        def fake_whisper(path, cancelled=None):
+            seen["cancelled"] = cancelled
+            assert cancelled is not None, "取消旗標要傳進 Whisper 備援"
+            assert cancelled() is True
+            raise audio_transcript.AudioCancelled()
+
+        with fake_ytdlp(),                 patch.object(audio_transcript, "_sensevoice", side_effect=fake_sensevoice),                 patch.object(audio_transcript, "_whisper", side_effect=fake_whisper),                 patch.object(audio_transcript.tempfile, "mkdtemp", return_value=str(tmpdir)):
+            try:
+                audio_transcript.transcribe(URL, cache_key="bilibili:BV1:x",
+                                            cancelled=lambda: state["cancel"])
+                assert False, "Whisper 備援取消也要中止"
+            except audio_transcript.AudioCancelled:
+                pass
+        assert "cancelled" in seen
+        assert not tmpdir.exists()
+
+
+def test_size_limit_hit_only_during_download_reports_too_large():
+    """yt-dlp 的 max_filesize 超過時只跳過、不丟例外；要回「超過大小」而不是泛用失敗。"""
+
+    class OversizeYDL(FakeYoutubeDL):
+        def extract_info(self, url, download=False):
+            if not download:
+                return {"duration": 60, "filesize": 1024}   # 中繼資料看起來沒超過
+            return {"duration": 60, "filesize": audio_transcript.MAX_BYTES + 1}
+
+    with tempfile.TemporaryDirectory() as tmp:
+        with patch.dict(sys.modules, {"yt_dlp": types.SimpleNamespace(YoutubeDL=OversizeYDL)}),                 patch.object(audio_transcript.tempfile, "mkdtemp", return_value=str(Path(tmp) / "audio")):
+            (Path(tmp) / "audio").mkdir()
+            try:
+                audio_transcript.transcribe(URL, cache_key="bilibili:BV1:x")
+                assert False, "超過大小要拒絕"
+            except ValueError as exc:
+                assert str(audio_transcript.MAX_BYTES // (1024 * 1024)) in str(exc), str(exc)
+
+
 def test_closing_the_stream_stops_the_background_fetch():
     started = threading.Event()
     stopped = threading.Event()
@@ -294,6 +342,8 @@ if __name__ == "__main__":
     test_cancel_during_transcription_stops_and_removes_temp_dir()
     test_cache_key_includes_cid()
     test_remote_request_cannot_ask_for_audio_download()
+    test_cancel_during_whisper_fallback_stops_and_removes_temp_dir()
+    test_size_limit_hit_only_during_download_reports_too_large()
     test_download_and_transcribe_progress_keep_stage_source()
     test_fatal_events_carry_a_code_for_bilibili_caption_errors()
     test_fatal_events_have_no_code_for_other_errors()

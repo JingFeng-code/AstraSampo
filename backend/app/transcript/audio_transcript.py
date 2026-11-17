@@ -19,6 +19,7 @@ from typing import Callable, Optional
 
 from app.core import messages
 from app.transcript import cache, imported_subtitles
+from app.transcript.cancel import TranscriptionCancelled
 
 # 上限刻意寫死在程式裡：不提供放寬的設定，避免「下載更多影片」變成預設行為
 MAX_MINUTES = 90
@@ -26,8 +27,8 @@ MAX_BYTES = 500 * 1024 * 1024
 _SOCKET_TIMEOUT = 20
 
 
-class AudioCancelled(Exception):
-    """使用者按下停止（或連線中斷）：中止下載／轉寫並清掉暫存檔。"""
+# 向後相容的別名：舊程式與測試用 AudioCancelled 這個名字
+AudioCancelled = TranscriptionCancelled
 
 
 def _yt_dlp():
@@ -66,7 +67,8 @@ def _download(url: str, tmpdir: str, cancelled: Optional[Callable[[], bool]] = N
               on_progress: Optional[Callable[[dict], None]] = None) -> str:
     """用 yt-dlp 下載純音訊串流，回傳檔案路徑（影片與音訊都不留在專案目錄）。"""
     yt_dlp = _yt_dlp()
-    _guard_limits(_metadata(url))
+    info = _metadata(url)
+    _guard_limits(info)
 
     def hook(status: dict) -> None:
         if cancelled and cancelled():
@@ -92,7 +94,7 @@ def _download(url: str, tmpdir: str, cancelled: Optional[Callable[[], bool]] = N
     }
     try:
         with yt_dlp.YoutubeDL(options) as ydl:
-            ydl.extract_info(url, download=True)
+            result = ydl.extract_info(url, download=True)
     except AudioCancelled:
         raise
     except Exception as exc:  # noqa: BLE001
@@ -105,6 +107,12 @@ def _download(url: str, tmpdir: str, cancelled: Optional[Callable[[], bool]] = N
         raise AudioCancelled()
     files = sorted(glob.glob(os.path.join(tmpdir, "audio.*")))
     if not files:
+        # yt-dlp 的 max_filesize 超過時只會「跳過下載」、不丟例外；用中繼資料判斷
+        # 是不是大小問題，才不會把使用者導向泛用的「下載失敗」。
+        detail = result if isinstance(result, dict) else info
+        size = detail.get("filesize") or detail.get("filesize_approx")
+        if isinstance(size, (int, float)) and size > MAX_BYTES:
+            raise ValueError(messages.t("whisper.too_large", mb=MAX_BYTES // (1024 * 1024)))
         raise ValueError(messages.t("whisper.download_failed"))
     return files[0]
 
@@ -122,11 +130,12 @@ def _sensevoice(path: str, cancelled: Optional[Callable[[], bool]] = None) -> Op
     return imported_subtitles.transcript_from_cues(cues), True
 
 
-def _whisper(path: str) -> Optional[tuple[str, bool]]:
+def _whisper(path: str, cancelled: Optional[Callable[[], bool]] = None) -> Optional[tuple[str, bool]]:
     try:
         from app.transcript import whisper_local
 
-        return whisper_local.transcribe_file(path)
+        # 備援引擎也要能中途停止：逐段解碼時檢查旗標，取消就往上拋（finally 會刪暫存）
+        return whisper_local.transcribe_file(path, cancelled)
     except (ImportError, ValueError):
         return None
 
@@ -156,7 +165,7 @@ def transcribe(url: str, cache_key: Optional[str] = None, *,
         if heard:
             result = (heard[0], heard[1], "local_speech")
         else:
-            heard = _whisper(audio)
+            heard = _whisper(audio, cancelled)
             result = (heard[0], heard[1], "whisper") if heard else None
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
