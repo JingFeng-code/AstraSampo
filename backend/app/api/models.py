@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Query
 
 from app.core import languages
-from app.llm import anthropic_api, gemini, openai_compat, ollama
+from app.llm import anthropic_api, gemini, ollama, ollama_cloud, openai_compat
 
 router = APIRouter(tags=["models"])
 
@@ -20,6 +20,12 @@ def list_models() -> dict:
             "label": "Ollama（本機）", "models": local["models"],
             "source": "local", "configured": local["connected"] and bool(local["models"]),
             "free": True, "connected": local["connected"],
+        },
+        # Ollama Cloud 只看「有沒有存金鑰」：模型清單要等 POST /providers/check
+        # 驗證過才會出現，這裡不假裝已經可用。
+        "ollama-cloud": {
+            "label": "Ollama Cloud", "models": [],
+            "source": "unverified", "configured": ollama_cloud.is_configured(), "free": False,
         },
         "gemini": {
             "label": "Google Gemini", "models": [],

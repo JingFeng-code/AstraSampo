@@ -12,12 +12,13 @@ import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from app.core import config
-from app.llm import ollama
+from app.core import config, messages
+from app.llm.base import ProviderError
+from app.llm import ollama, ollama_cloud
 
 router = APIRouter(prefix="/providers", tags=["providers"])
 
-Provider = Literal["gemini", "openai", "deepseek", "anthropic", "ollama",
+Provider = Literal["gemini", "openai", "deepseek", "anthropic", "ollama", "ollama-cloud",
                    "openrouter", "groq", "mistral", "together"]
 _CONFIG_KEYS = {
     "gemini": "GEMINI_API_KEY",
@@ -28,6 +29,7 @@ _CONFIG_KEYS = {
     "groq": "GROQ_API_KEY",
     "mistral": "MISTRAL_API_KEY",
     "together": "TOGETHER_API_KEY",
+    "ollama-cloud": "OLLAMA_CLOUD_API_KEY",
 }
 _ENDPOINTS = {
     "openai": "https://api.openai.com/v1/models",
@@ -143,6 +145,19 @@ def _gemini_models(key: str) -> list[str]:
 @router.post("/check")
 def check_provider(req: CheckProviderRequest) -> dict:
     """傳回已驗證連線的模型；只在雲端使用者明確按下檢查時傳送其金鑰。"""
+    if req.provider == "ollama-cloud":
+        key = (req.api_key or "").strip() or ollama_cloud.api_key()
+        if not key:
+            raise HTTPException(400, messages.t("provider.ollama_cloud_no_key"))
+        try:
+            models = ollama_cloud.list_models(key)
+        except ProviderError as exc:
+            raise HTTPException(401, str(exc)) from exc
+        except httpx.HTTPError as exc:
+            raise HTTPException(502, str(exc)) from exc
+        if not models:
+            raise HTTPException(422, "連線成功，但這把金鑰看不到任何模型。")
+        return {"provider": "ollama-cloud", "connected": True, "models": models, "source": "live"}
     if req.provider == "ollama":
         status = ollama.connection_status(req.ollama_base_url)
         if not status["connected"]:

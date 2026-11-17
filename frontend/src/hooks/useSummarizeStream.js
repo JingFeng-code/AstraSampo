@@ -7,27 +7,33 @@ export default function useSummarizeStream({ initialResult = null, onSegError, o
   const [result, setResult] = useState(initialResult)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  // 後端用 code 標記「確定沒有字幕／需要登入」，前端不能靠翻譯後的文字判斷
+  const [errorCode, setErrorCode] = useState('')
   const [coverage, setCoverage] = useState(initialResult?.coverage_limit || null)
   const [progress, setProgress] = useState(null)
   // 使用者按「停止」：中斷這次請求，已經產生的知識卡保留
   const [stopped, setStopped] = useState(false)
   const controllerRef = useRef(null)
 
-  async function summarize(url, provider, deepVisual=false, localName=null) {
+  // allowAudioDownload：只有使用者在錯誤區塊按了兩次確認才會是 true
+  async function summarize(url, provider, deepVisual=false, localName=null, allowAudioDownload=false) {
     const u = url.trim()
     if (!u || loading) return null
     const startedAt = Date.now()
     const controller = new AbortController()
     controllerRef.current = controller
     setStopped(false)
-    setLoading(true); setError(''); setCoverage(null); setResult(null); setProgress({ stage: 'source', completed: 0, total: 0, startedAt })
-    const draft = { title: '', source_type: '', source_url: u, youtube_video_id: null, bilibili_video_id: null, bilibili_page: null, local_video_id: null, local_name: localName, cards: [], model_used: '', segments: 0, transcript_source: null, content_type: 'other' }
+    setLoading(true); setError(''); setErrorCode(''); setCoverage(null); setResult(null); setProgress({ stage: 'source', completed: 0, total: 0, startedAt })
+    const draft = { title: '', source_type: '', source_url: u, youtube_video_id: null, bilibili_video_id: null, bilibili_page: null, local_video_id: null, local_name: localName, cards: [], model_used: '', segments: 0, transcript_source: null, content_type: 'other', overview: null }
     let segsDone = 0
     let firstSegmentError = ''
+    let fatalCode = ''
     try {
       await api.summarizeStream(u, provider, deepVisual, ev => {
         if (ev.type === 'progress') {
-          setProgress(p => ({ ...p, stage: ev.stage, completed: ev.completed || 0, total: ev.total || 0, startedAt: p?.startedAt || startedAt }))
+          // 下載音訊／本機轉錄的進度也走同一條路（stage: source、state: download／transcribe）
+          setProgress(p => ({ ...p, stage: ev.stage, state: ev.state, percent: ev.percent ?? null,
+            completed: ev.completed || 0, total: ev.total || 0, startedAt: p?.startedAt || startedAt }))
         } else if (ev.type === 'meta') {
           draft.source_type = ev.source_type; draft.youtube_video_id = ev.youtube_video_id
           draft.bilibili_video_id = ev.bilibili_video_id || null; draft.bilibili_page = ev.bilibili_page || null
@@ -56,19 +62,26 @@ export default function useSummarizeStream({ initialResult = null, onSegError, o
           if (!firstSegmentError && typeof ev.error === 'string') firstSegmentError = ev.error.trim().slice(0, 220)
           segsDone++; setProgress(p => ({ ...p, stage: 'generate', state: 'next', completed: segsDone, total: draft.segments, startedAt })); onSegError?.(ev)
         } else if (ev.type === 'fatal') {
+          fatalCode = ev.code || ''
           throw new Error(ev.error)
+        } else if (ev.type === 'overview') {
+          draft.overview = { summary: ev.summary || '', points: ev.points || [] }
+          setResult({ ...draft })
         } else if (ev.type === 'done') {
           draft.title = draft.title || ev.title; draft.model_used = ev.model_used || draft.model_used
           draft.content_type = ev.content_type || draft.content_type
           setResult({ ...draft }); setProgress(null)
         }
-      }, controller.signal)
+      }, controller.signal, allowAudioDownload)
       if (!draft.cards.length && !controller.signal.aborted) setError(firstSegmentError ? `${t('error.noCards')} · ${firstSegmentError}` : t('error.noCards'))
     } catch (e) {
       if (controller.signal.aborted) {
         setStopped(true)
         if (draft.cards.length) setResult({ ...draft })
-      } else setError(t('error.generate', e.message))
+      } else {
+        setError(t('error.generate', e.message))
+        setErrorCode(fatalCode)
+      }
     } finally {
       if (controllerRef.current === controller) controllerRef.current = null
       setLoading(false); setProgress(null)
@@ -78,5 +91,5 @@ export default function useSummarizeStream({ initialResult = null, onSegError, o
 
   function stop() { controllerRef.current?.abort() }
 
-  return { result, setResult, loading, error, notice: coverageNotice(coverage, t), progress, summarize, stop, stopped }
+  return { result, setResult, loading, error, errorCode, notice: coverageNotice(coverage, t), progress, summarize, stop, stopped }
 }

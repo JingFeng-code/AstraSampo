@@ -233,6 +233,9 @@ export default function VideoPane({ localSrc=null, onPickLocal, videoId, startAt
           <YouTubePlayer key={videoId} videoId={videoId} startAt={seek} onTime={seconds => setTime(seconds)} /> :
           <iframe key={`${startAt.key}:${manualSeek.key}`} src={biliSrc} title="Bilibili"
             allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen />}
+        {platform === 'bilibili' && videoId &&
+          <a className="video-open-external" href={`https://www.bilibili.com/video/${videoId}/?p=${page}`}
+             target="_blank" rel="noopener noreferrer">{t('pane.openInBrowser')}</a>}
         {/* Bilibili 讀不到播放進度，其他來源才能把字幕對到畫面上；不攔截滑鼠，不影響播放器操作 */}
         {overlay.length > 0 && <div className="subtitle-overlay" aria-hidden="true">
           {overlay.map(line => <span key={line.kind} className={`subtitle-overlay-line ${line.kind}`}>{line.text}</span>)}
@@ -250,7 +253,7 @@ export default function VideoPane({ localSrc=null, onPickLocal, videoId, startAt
       <section className="subtitles-panel" hidden={tab!=='subtitles'} aria-label={t('subtitles.title')}>
         <div className="subtitles-head">
           <strong>{t('subtitles.title')}</strong>
-          <span>{t('subtitles.translationProgress', translatedCount, cues.length)}</span>
+          <span>{cues.length === 0 ? t('subtitles.none') : t('subtitles.translationProgress', translatedCount, cues.length)}</span>
         </div>
         {subtitleSource === 'imported' && <p className="subtitles-hint">
           {t('subtitles.importedTiming', subtitleTiming === 'milliseconds_original')}

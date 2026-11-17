@@ -42,8 +42,8 @@ async function postStream(path, body, onEvent, signal) {
 }
 export const summarize = (url, provider, deep_visual=false) => post('/summarize', {url, provider, deep_visual})
 // 串流版：邊生成邊回傳。segment_status 會帶出 API 等待、重試與模型切換狀態。
-export const summarizeStream = (url, provider, deep_visual=false, onEvent, signal) =>
-  postStream('/summarize_stream', {url, provider, deep_visual}, onEvent, signal)
+export const summarizeStream = (url, provider, deep_visual=false, onEvent, signal, allow_audio_download=false) =>
+  postStream('/summarize_stream', {url, provider, deep_visual, allow_audio_download}, onEvent, signal)
 export const deepdive  = (provider, source_title, card) => post('/deepdive', {provider, source_title, card})
 // 實作：把整支影片交給本機 CLI agent 產出實體檔案。
 // status 先問「這台機器有沒有 CLI」，前端據此決定顯示執行、指令、還是安裝教學。
@@ -77,6 +77,8 @@ export const importedSubtitleStatus = videoUrl => post('/subtitles/imported/stat
 export const translateSubtitles = (platform, videoId, page=1, startIndex=0, batchSize=16, translationProvider='opencode') =>
   post('/subtitles/translate', {platform, video_id:videoId, page, start_index:startIndex, batch_size:batchSize, translation_provider:translationProvider})
 export const saveNote  = (payload) => post('/notes/save', payload)
+// 桌面版匯出：Tauri 沒有下載管理員，<a download> 不會產生檔案，改由後端寫檔
+export const exportNoteMarkdown = (filename, markdown) => post('/notes/export', {filename, markdown})
 export const getSpeechStatus = () => get('/local-video/speech')
 export const getWatchStatus = () => get('/watch/status')
 export const getWatchVisionModels = () => get('/watch/vision-models')
@@ -125,6 +127,8 @@ export async function getSettings() {
   catch { return {configured:false,offline:true} }
 }
 export const saveSettings = (payload) => post('/settings', payload)
+export const getBilibiliBrowsers = () => get('/settings/bilibili-browsers')
+export const importBilibiliCookie = (browser) => post('/settings/bilibili-cookie', { browser })
 // 只檢查指定供應商；暫時輸入的 API Key 不會儲存，成功後才讓使用者選模型。
 export const checkProvider = (payload) => post('/providers/check', payload)
 // 不需先儲存：帶入設定畫面上目前輸入的網址（後端仍只接受本機 11434 埠）

@@ -42,7 +42,8 @@ test('整理中把開始按鈕換成停止，停止後保留已產生的知識�
   assert.match(app, /stream\.stopped&&/)
   const hook = read('../src/hooks/useSummarizeStream.js')
   assert.match(hook, /new AbortController\(\)/)
-  assert.match(hook, /\}, controller\.signal\)/)
+  // 最後一個參數是 allowAudioDownload（下載音訊要使用者確認才會是 true）
+  assert.match(hook, /\}, controller\.signal, allowAudioDownload\)/)
   // 被使用者停止不算錯誤；有卡片就保留
   assert.match(hook, /if \(controller\.signal\.aborted\) \{\s*setStopped\(true\)\s*if \(draft\.cards\.length\) setResult/)
   assert.match(hook, /function stop\(\) \{ controllerRef\.current\?\.abort\(\) \}/)

@@ -18,14 +18,19 @@ import useCards from './hooks/useCards.js'
 import useNotesVault from './hooks/useNotesVault.js'
 import { useI18n } from './i18n/index.jsx'
 import { DEEP_VISUAL_KEY, deepVisualNotice, effectiveDeepVisual, isBilibiliUrl } from './utils/user-mode.js'
-import { detectSource, needsSubtitleImport, noCaptionAction, sourceHintKey } from './utils/source-info.js'
-import { createNoteMarkdown, markdownFilename } from './utils/notes-export.js'
+import { canOfferAudioDownload, detectSource, needsSubtitleImport, noCaptionAction, sourceHintKey } from './utils/source-info.js'
+import { sourceProgressLabel } from './utils/progress-label.js'
+import { createNoteMarkdown, downloadMarkdown, markdownFilename, saveNoteMarkdown } from './utils/notes-export.js'
+import { noteVideoKey, resolveNoteFilename } from './utils/note-filename.js'
 import { NARROW_QUERY, effectiveResultTab, resultTabs } from './utils/result-tabs.js'
+import { deckShortcutsEnabled } from './utils/deck-tabs.js'
 import { isVideoFile, localVideoId, localVideoUrl } from './utils/local-video.js'
 import { watchTarget } from './utils/watch.js'
 import WatchAlong from './components/WatchAlong.jsx'
-import { getWatchStatus } from './api.js'
+import { getDesktopConnection } from './desktop.js'
+import { getWatchStatus, exportNoteMarkdown } from './api.js'
 import LocalSpeechControls from './components/LocalSpeechControls.jsx'
+import AudioDownloadPrompt from './components/AudioDownloadPrompt.jsx'
 
 // 本機工作階段持久化：整理結果、卡片索引、筆記草稿都存在瀏覽器裡，重開仍在。
 const SKEY='ycr-session-v1'
@@ -57,15 +62,18 @@ function GenerationProgress({ progress }){
   const seg=Number.isInteger(progress.seg)?t('progress.segment',progress.seg+1):t('progress.preparing')
   const model=progress.model?` · ${progress.model}`:''
   const apiName=progress.provider==='opencode'?'OpenCode':(progress.provider||'API')
-  let label=t('progress.generate')
-  if(progress.stage==='source') label=t('progress.source')
-  else if(progress.phase==='coverage') label=t('progress.coverage',seg,model)
-  else if(progress.state==='rate_wait') label=t('progress.rateWait',seg,apiName,progress.delay||0)
-  else if(progress.state==='retry_wait') label=t('progress.retry',seg,apiName,progress.delay||0,progress.attempt||'',progress.tries||'')
-  else if(progress.state==='model_switch') label=t('progress.modelSwitch',seg,progress.model)
-  else if(progress.state==='key_switch') label=t('progress.keySwitch',seg)
-  else if(progress.state==='request') label=t('progress.waiting',seg,model,(progress.attempt||1)>1?t('progress.retrySuffix',progress.attempt,progress.tries):'')
-  else if(progress.state==='next') label=completed<total?t('progress.next',completed+1):t('progress.done')
+  // 下載音訊／本機轉錄可能跑好幾分鐘，要讓畫面看得到現在在做什麼
+  const sourceLabel=sourceProgressLabel(progress,t)
+  let label=sourceLabel||t('progress.generate')
+  if(!sourceLabel){
+    if(progress.phase==='coverage') label=t('progress.coverage',seg,model)
+    else if(progress.state==='rate_wait') label=t('progress.rateWait',seg,apiName,progress.delay||0)
+    else if(progress.state==='retry_wait') label=t('progress.retry',seg,apiName,progress.delay||0,progress.attempt||'',progress.tries||'')
+    else if(progress.state==='model_switch') label=t('progress.modelSwitch',seg,progress.model)
+    else if(progress.state==='key_switch') label=t('progress.keySwitch',seg)
+    else if(progress.state==='request') label=t('progress.waiting',seg,model,(progress.attempt||1)>1?t('progress.retrySuffix',progress.attempt,progress.tries):'')
+    else if(progress.state==='next') label=completed<total?t('progress.next',completed+1):t('progress.done')
+  }
   return <div className="generation-progress" role="progressbar" aria-label={label} aria-valuemin="0" aria-valuemax={total||undefined} aria-valuenow={total?completed:undefined}>
     <div className="generation-meta"><span className="generation-label">{label}</span><span className="generation-count">{total>0?`${completed} / ${total} · `:''}{clock}</span></div>
     <div className="generation-track"><span style={{transform:`scaleX(${ratio})`}}/></div>
@@ -89,10 +97,14 @@ export default function App() {
   const setSplit=v=>{setSplitRaw(v);try{localStorage.setItem(SPKEY,String(v))}catch{}}
   useLayoutEffect(()=>{workspaceRef.current?.style.setProperty('--split',String(split))},[split])
   const [freeNote,setFreeNote]=useState(SAVED.freeNote||''), [filename,setFilename]=useState(SAVED.filename||'')
+  // 檔名是不是使用者自己改的：改過就只在同一支影片內沿用，換影片要換新標題
+  const [filenameMeta,setFilenameMeta]=useState(()=>SAVED.filenameMeta||{videoKey:'',edited:false})
   const [showSettings,setShowSettings]=useState(false)
   const [settingsFocus,setSettingsFocus]=useState(null)
   const [subtitleRevision,setSubtitleRevision]=useState(0)
   const [toast,setToast]=useState(null)
+  // 上次存檔的完整路徑：toast 只活 4 秒，長路徑要留在面板上給使用者看和複製
+  const [lastNoteSave,setLastNoteSave]=useState(null)
   const toastTimer=useRef(null)
   const showToast=(msg,isErr=false)=>{clearTimeout(toastTimer.current);setToast({msg,isErr});toastTimer.current=setTimeout(()=>setToast(null),4200)}
 
@@ -111,12 +123,22 @@ export default function App() {
   const notes = useNotesVault(SAVED.saveOpts)
   const implement = useImplement({ result, provider: activeProvider, t })
 
-  // 摘要標題一到就當作預設檔名
-  useEffect(()=>{ if(result?.title) setFilename(f=>f||result.title) },[result?.title])
+  // 摘要標題一到就當作預設檔名；同一支影片內手動改過的值不會被蓋掉
+  useEffect(()=>{
+    if(!result?.title)return
+    const next=resolveNoteFilename(
+      {filename,videoKey:filenameMeta.videoKey,edited:filenameMeta.edited},
+      {title:result.title,key:noteVideoKey(result,url)},
+    )
+    if(next.filename!==filename)setFilename(next.filename)
+    if(next.videoKey!==filenameMeta.videoKey||next.edited!==filenameMeta.edited)setFilenameMeta({videoKey:next.videoKey,edited:next.edited})
+  },[result?.title,result?.source_url,result?.youtube_video_id,result?.bilibili_video_id,result?.local_video_id])
+  // 手動編輯後標記起來，接下來切卡片、收合面板、重新整理都保留
+  function changeFilename(value){setFilename(value);setFilenameMeta(m=>({...m,edited:true}))}
   // 工作階段持久化：任何整理狀態改變就寫回 localStorage
   useEffect(()=>{
-    try{localStorage.setItem(SKEY,JSON.stringify({url,sourceMode,localVideo:localVideo?{id:localVideo.id,name:localVideo.name}:null,provider,result,index:cardsHook.index,deepdives:cardsHook.deepdives,clips:cardsHook.clips,freeNote,filename,saveOpts:notes.saveOpts}))}catch{}
-  },[url,sourceMode,localVideo?.id,localVideo?.name,provider,result,cardsHook.index,cardsHook.deepdives,cardsHook.clips,freeNote,filename,notes.saveOpts])
+    try{localStorage.setItem(SKEY,JSON.stringify({url,sourceMode,localVideo:localVideo?{id:localVideo.id,name:localVideo.name}:null,provider,result,index:cardsHook.index,deepdives:cardsHook.deepdives,clips:cardsHook.clips,freeNote,filename,filenameMeta,saveOpts:notes.saveOpts}))}catch{}
+  },[url,sourceMode,localVideo?.id,localVideo?.name,provider,result,cardsHook.index,cardsHook.deepdives,cardsHook.clips,freeNote,filename,filenameMeta,notes.saveOpts])
 
   function handleSettingsSaved(next){
     setSettings(next)
@@ -142,10 +164,11 @@ export default function App() {
   const [watching,setWatching]=useState(false)
   useEffect(()=>{getWatchStatus().then(r=>setWatchAvailable(!!r.available)).catch(()=>{})},[])
   function finishWatching(){setWatching(false);startAnalysis(false)}
-  async function startAnalysis(useVisual){
+  // allowAudio：只有使用者在錯誤區塊按下「確定下載」才會是 true
+  async function startAnalysis(useVisual,allowAudio=false){
     if(!activeProvider){setShowSettings(true);showToast(t('ai.notReady'),true);return}
     cardsHook.resetForNewResult()
-    await stream.summarize(isLocalMode?localUrl:url,activeProvider,useVisual,isLocalMode?localVideo?.name:null)
+    await stream.summarize(isLocalMode?localUrl:url,activeProvider,useVisual,isLocalMode?localVideo?.name:null,allowAudio)
   }
   const handleSummarize=()=>startAnalysis(!isLocalMode&&effectiveDeepVisual(deepVisual,url))
   async function pickLocalVideo(event){
@@ -173,20 +196,44 @@ export default function App() {
     }catch(e){showToast(e.message===t('error.pickNote')?e.message:t('toast.saveFailed',e.message),true)}
   }
 
+  const noteTitle=()=>filename||result?.title||t('note.summary')
+  function saveNotesMarkdown(markdown){
+    saveNoteMarkdown({
+      markdown, filename:markdownFilename(noteTitle()), isDesktop:!!getDesktopConnection(), t,
+      saveToBackend:exportNoteMarkdown,
+      downloadInBrowser:downloadMarkdown,
+    }).then(r=>{showToast(r.message,!r.ok);if(r.ok&&r.savedTo)setLastNoteSave(r.savedTo)})
+  }
   function handleExportNotes(){
-    const markdown=createNoteMarkdown({title:filename||result?.title||t('note.summary'),sourceUrl:noteSource,clips:cardsHook.clips,freeNote})
-    const blob=new Blob([markdown],{type:'text/markdown;charset=utf-8'})
-    const href=URL.createObjectURL(blob)
-    const element=document.createElement('a')
-    element.href=href
-    element.download=markdownFilename(filename||result?.title||t('note.summary'))
-    document.body.appendChild(element)
-    element.click()
-    element.remove()
-    setTimeout(()=>URL.revokeObjectURL(href),1000)
+    saveNotesMarkdown(createNoteMarkdown({title:noteTitle(),sourceUrl:noteSource,clips:cardsHook.clips,freeNote}))
+  }
+  // 不必先收進筆記：總結＋全部卡片（依時間排序）＋隨手筆記一次匯出
+  function handleExportAllNotes(){
+    // 已收的卡片帶上筆記裡那一份，才不會把使用者寫的註記丟掉
+    const clips=mergeForExport(cardsHook.clips,cardsHook.allClips())
+    saveNotesMarkdown(createNoteMarkdown({title:noteTitle(),sourceUrl:noteSource,clips,freeNote,overview:result?.overview}))
+  }
+  function handleClipAll(){
+    const added=cardsHook.clipAll()
+    showToast(added?t('toast.clippedAll',added):t('toast.clippedNone'))
+  }
+  function handleClearNotes(){
+    cardsHook.setClips([]); setFreeNote('')
+    showToast(t('toast.notesCleared'))
   }
 
-  useEffect(()=>{function onKey(e){const tag=document.activeElement?.tagName;if(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT')return;if(!cards.length)return;if(e.key==='ArrowRight')cardsHook.jumpToCard(Math.min(cardsHook.index+1,cards.length-1),true);else if(e.key==='ArrowLeft')cardsHook.jumpToCard(Math.max(cardsHook.index-1,0),true);else if(e.key.toLowerCase()==='n')clipCard(cardsHook.index)};window.addEventListener('keydown',onKey);return()=>window.removeEventListener('keydown',onKey)})
+  async function handleCopyNotes(){
+    const markdown=createNoteMarkdown({title:noteTitle(),sourceUrl:noteSource,clips:cardsHook.clips,freeNote})
+    try{
+      if(!navigator.clipboard?.writeText)throw new Error(t('notes.clipboardUnavailable'))
+      await navigator.clipboard.writeText(markdown)
+      showToast(t('toast.copied'))
+    }catch(e){showToast(t('toast.copyFailed',e?.message||String(e)),true)}
+  }
+
+  // 重點區目前在哪個分頁：在「總結」分頁時快捷鍵不能偷偷操作看不到的卡片
+  const deckTabRef=useRef('cards')
+  useEffect(()=>{function onKey(e){const tag=document.activeElement?.tagName;if(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT')return;if(!deckShortcutsEnabled(deckTabRef.current,cards.length,result?.overview))return;if(e.key==='ArrowRight')cardsHook.jumpToCard(Math.min(cardsHook.index+1,cards.length-1),false);else if(e.key==='ArrowLeft')cardsHook.jumpToCard(Math.max(cardsHook.index-1,0),false);else if(e.key.toLowerCase()==='n')clipCard(cardsHook.index)};window.addEventListener('keydown',onKey);return()=>window.removeEventListener('keydown',onKey)})
 
   const vc=!notes.vault.configured?{cls:'warn',text:t('vault.notConfigured')}:!notes.vault.exists?{cls:'warn',text:t('vault.missing')}:{cls:'ok',text:t('vault.connected')}
 
@@ -204,6 +251,8 @@ export default function App() {
   const source=isLocalMode?'local':detectSource(url)
   const showSourceHint=!!source&&(isLocalMode?!compact:(!compact||url.trim()!==(result?.source_url||'').trim()))
   const errorNeedsImport=needsSubtitleImport(stream.error)
+  // Bilibili 沒有字幕（或需要登入）時，才提供「下載音訊並在本機轉錄」這條路
+  const canDownloadAudio=!isLocalMode&&canOfferAudioDownload(source,stream.errorCode)
   const watchVideo=!isLocalMode&&watchAvailable?watchTarget(url):null
   const watchOffer=watchVideo&&<div className="no-caption-option"><span>{t('watch.offer')}</span><button type="button" className="btn-paper" onClick={()=>setWatching(true)}>{t('watch.open')}</button></div>
   const captionAction=errorNeedsImport?noCaptionAction(source,deepVisual,!!providers?.gemini?.configured):null
@@ -262,19 +311,19 @@ export default function App() {
       <GenerationProgress progress={stream.progress}/>
       {showLocalSubtitleRow&&<div className="local-subtitle-row">{localSubtitleControls}{localSpeechControls}</div>}
       {/* 進入陪看後把「整理失敗」與匯入、讀畫面等選項收起來，畫面留給陪看；關掉陪看就恢復 */}
-      {stream.error&&!(watching&&watchVideo)&&<div className="error-block"><p className="error-bar">{stream.error}</p>{errorNeedsImport&&!isLocalMode&&<SubtitleImportControls videoUrl={url} onChanged={()=>setSubtitleRevision(v=>v+1)} onAnalyze={handleSummarize} noFileHint={watchVideo?t('subtitles.importNoFileWatch'):captionAction?t('subtitles.importNoFileVisual'):undefined}/>}{errorNeedsImport&&watchOffer}{captionAction&&<div className="no-caption-option"><span>{t(captionAction==='add-key'?'noCaption.addKey':'noCaption.enableVisual')}</span>{captionAction==='add-key'?<button type="button" className="btn-paper" onClick={openVisualKeySettings}>{t('noCaption.addKeyAction')}</button>:<button type="button" className="btn-paper" onClick={analyzeWithVisual}>{t('noCaption.enableVisualAction')}</button>}</div>}</div>}
+      {stream.error&&!(watching&&watchVideo)&&<div className="error-block"><p className="error-bar">{stream.error}</p>{errorNeedsImport&&!isLocalMode&&<SubtitleImportControls videoUrl={url} onChanged={()=>setSubtitleRevision(v=>v+1)} onAnalyze={handleSummarize} noFileHint={watchVideo?t('subtitles.importNoFileWatch'):captionAction?t('subtitles.importNoFileVisual'):undefined}/>}{errorNeedsImport&&watchOffer}{canDownloadAudio&&<AudioDownloadPrompt busy={stream.loading||!!stream.progress} onConfirm={()=>startAnalysis(false,true)}/>}{captionAction&&<div className="no-caption-option"><span>{t(captionAction==='add-key'?'noCaption.addKey':'noCaption.enableVisual')}</span>{captionAction==='add-key'?<button type="button" className="btn-paper" onClick={openVisualKeySettings}>{t('noCaption.addKeyAction')}</button>:<button type="button" className="btn-paper" onClick={analyzeWithVisual}>{t('noCaption.enableVisualAction')}</button>}</div>}</div>}
       {stream.notice&&<p className="error-bar" role="status">{stream.notice}</p>}
       {stream.stopped&&<p className="error-bar" role="status">{t(result?.cards?.length?'input.stoppedPartial':'input.stopped')}</p>}
       {/* 有影片時左右並排；純文章來源則讓重點區佔滿 */}
       <main className={`workspace ${splitLayout?'workspace-split':''}`} data-result-tab={splitLayout&&narrow?activeTab:undefined} ref={workspaceRef}>
         {watching&&watchVideo?<WatchAlong key={`${watchVideo.platform}:${watchVideo.videoId}:${watchVideo.page}`} target={watchVideo} provider={activeProvider} onFinished={finishWatching} onClose={()=>setWatching(false)}/>:stream.loading?<div className="loading-space" aria-hidden="true"/>
         :!result?<div className="empty-state"><span className="empty-logo"><BrandMark/><strong>{t('app.name')}</strong></span><p className="empty-tagline">{t('app.tagline')}</p><ol className="empty-steps"><li>{t('empty.step1')}</li><li>{t('empty.step2')}</li><li>{t('empty.step3')}</li></ol></div>
-        :<>{hasVideo&&<VideoPane localSrc={localVideo?.id===result.local_video_id?localVideo.src:null} onPickLocal={()=>localPickerRef.current?.click()} videoId={isLocalResult?result.local_video_id:isBilibili?result.bilibili_video_id:result.youtube_video_id} platform={isLocalResult?'local':isBilibili?'bilibili':'youtube'} page={result.bilibili_page||1} provider={activeProvider} subtitleRevision={subtitleRevision} startAt={cardsHook.startAt} cards={cards} activeIndex={cardsHook.index} onJump={i=>cardsHook.jumpToCard(i,true)} tabs={resultTabs(narrow)} tab={activeTab} onTabChange={setResultTab}/>}{hasVideo&&<Splitter onCommit={setSplit}/>}<CardDeck result={result} index={cardsHook.index} setIndex={cardsHook.setIndex} clippedIds={cardsHook.clippedIds} onClip={clipCard} onJumpVideo={i=>cardsHook.jumpToCard(i,true)} deepdives={cardsHook.deepdives} onDeepDive={onDeepDive} deepdiveLoading={cardsHook.ddLoading} onImplement={implement.start} fullWidth={!hasVideo} /></>}
+        :<>{hasVideo&&<VideoPane localSrc={localVideo?.id===result.local_video_id?localVideo.src:null} onPickLocal={()=>localPickerRef.current?.click()} videoId={isLocalResult?result.local_video_id:isBilibili?result.bilibili_video_id:result.youtube_video_id} platform={isLocalResult?'local':isBilibili?'bilibili':'youtube'} page={result.bilibili_page||1} provider={activeProvider} subtitleRevision={subtitleRevision} startAt={cardsHook.startAt} cards={cards} activeIndex={cardsHook.index} onJump={i=>cardsHook.jumpToCard(i,true)} tabs={resultTabs(narrow)} tab={activeTab} onTabChange={setResultTab}/>}{hasVideo&&<Splitter onCommit={setSplit}/>}<CardDeck result={result} index={cardsHook.index} setIndex={cardsHook.setIndex} clippedIds={cardsHook.clippedIds} onClip={clipCard} onJumpVideo={i=>cardsHook.jumpToCard(i,true)} deepdives={cardsHook.deepdives} onDeepDive={onDeepDive} deepdiveLoading={cardsHook.ddLoading} onImplement={implement.start} fullWidth={!hasVideo} onTabChange={tab=>{deckTabRef.current=tab}} /></>}
       </main>
       {/* 筆記／問模型：可最小化浮窗，不佔用主版面，展開/收合狀態記在 localStorage */}
       {result&&<>
-        <FloatingPanel id="notes" corner="br" title={t('panel.notes')} badge={cardsHook.clips.length||null}>
-          <NotesPanel onExport={handleExportNotes} vault={notes.vault} clips={cardsHook.clips} onClipNoteChange={cardsHook.updateClipNote} onRemoveClip={cardsHook.removeClip} freeNote={freeNote} setFreeNote={setFreeNote} filename={filename} setFilename={setFilename} onSave={handleSave} saving={notes.saving} folders={notes.folders} noteFiles={notes.noteFiles} saveOpts={notes.saveOpts} onSaveOptsChange={notes.onSaveOptsChange}/>
+        <FloatingPanel id="notes" corner="br" title={t('panel.notes')} badge={cardsHook.clips.length||null} onToggle={min=>{if(min)setLastNoteSave(null)}}>
+          <NotesPanel onExport={handleExportNotes} onExportAll={handleExportAllNotes} onClipAll={handleClipAll} onClear={handleClearNotes} onCopy={handleCopyNotes} lastSaved={lastNoteSave} cardCount={cards.length} vault={notes.vault} clips={cardsHook.clips} onClipNoteChange={cardsHook.updateClipNote} onRemoveClip={cardsHook.removeClip} freeNote={freeNote} setFreeNote={setFreeNote} filename={filename} setFilename={changeFilename} onSave={handleSave} saving={notes.saving} folders={notes.folders} noteFiles={notes.noteFiles} saveOpts={notes.saveOpts} onSaveOptsChange={notes.onSaveOptsChange}/>
         </FloatingPanel>
         <FloatingPanel id="ask" corner="bl" title={t('panel.ask')}>
           <AskPanel provider={activeProvider} videoId={result?.local_video_id?`local:${result.local_video_id}`:result?.youtube_video_id||(result?.bilibili_video_id?`bilibili:${result.bilibili_video_id}:p${result.bilibili_page||1}`:null)}/>
@@ -282,7 +331,7 @@ export default function App() {
       </>}
       {implement.open&&<ImplementModal state={implement} providers={providers} selectedProvider={activeProvider} onClose={implement.close} onToast={showToast}/>}
       {toast&&<div className={`toast ${toast.isErr?'err':''}`}>{toast.msg}</div>}
-      {(needsSetup||showSettings)&&<SettingsModal state={settings} mandatory={needsSetup} focus={settingsFocus} provider={provider} providers={providers} onProviderChange={setAiSource} onClose={()=>{setShowSettings(false);setSettingsFocus(null);refreshModels()}} onSaved={handleSettingsSaved}/>}
+      {(needsSetup||showSettings)&&<SettingsModal state={settings} mandatory={needsSetup} focus={settingsFocus} provider={provider} providers={providers} onProviderChange={setAiSource} onClose={()=>{setShowSettings(false);setSettingsFocus(null);refreshModels()}} onSaved={handleSettingsSaved} onSettingsChanged={next=>setSettings(next)}/>}
     </>
   )
 }

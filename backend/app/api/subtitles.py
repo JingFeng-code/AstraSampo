@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 from typing import Literal
 
+from app.core import config
 from app.transcript import bilibili, cache, captions, translation_cache, subtitle_translation, imported_subtitles
 from app.llm import opencode
 from app.llm.util import user_error
@@ -90,7 +91,7 @@ def get_subtitles(
         if not _BILIBILI_ID.fullmatch(video_id):
             raise HTTPException(400, "Bilibili BV 影片 ID 格式不正確。")
         try:
-            text, is_chinese = bilibili.fetch_transcript(video_id, page)
+            text, is_chinese = bilibili.fetch_transcript(video_id, page, config.get("BILIBILI_SESSDATA"))
         except ValueError as exc:
             raise HTTPException(404, str(exc)) from exc
 

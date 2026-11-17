@@ -25,7 +25,19 @@ def test_cached_transcript_still_works_on_desktop():
         assert whisper_local.transcribe_url("https://example.invalid", "key")[0] == "[0] 已快取"
 
 
+def test_cached_audio_transcript_keeps_engine():
+    """ASR 快取要回三個值；舊版只存兩項，第二次分析會 unpack 失敗。"""
+    from app.transcript import audio_transcript
+
+    with patch.object(audio_transcript.cache, "get_obj",
+                      return_value={"text": "[0] 已快取", "is_chinese": True,
+                                    "engine": "local_speech"}):
+        got = audio_transcript.transcribe("https://example.invalid/watch", "BV1TEST")
+    assert got == ("[0] 已快取", True, "local_speech"), got
+
+
 if __name__ == "__main__":
     test_frozen_desktop_gives_clear_message_without_spawning()
     test_cached_transcript_still_works_on_desktop()
+    test_cached_audio_transcript_keeps_engine()
     print("Desktop transcription fallback tests passed")

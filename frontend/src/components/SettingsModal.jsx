@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import * as api from '../api.js'
 import { useI18n } from '../i18n/index.jsx'
+import { applyPartialSettings } from '../utils/settings-partial.js'
+import { connectionCheckKey } from '../utils/provider-check.js'
 import { PROVIDER_ORDER, providerValue } from '../hooks/useModels.js'
 import { aiConnectionStatus, connectionCheckTarget } from '../utils/ai-source.js'
 
 // 同一頁只處理一個供應商，不再把所有供應商的模型攤平成選單。
 const KEY_FIELDS = {
+  'ollama-cloud': 'ollama_cloud_api_key',
   gemini: 'gemini_api_key',
   openai: 'openai_api_key',
   deepseek: 'deepseek_api_key',
@@ -24,7 +27,7 @@ function sourceParts(value = 'smart') {
     { engine: value.slice(0, colon), model: value.slice(colon + 1) }
 }
 
-export default function SettingsModal({ state, mandatory, focus, onClose, onSaved, provider='smart', providers={}, onProviderChange }) {
+export default function SettingsModal({ state, mandatory, focus, onClose, onSaved, provider='smart', providers={}, onProviderChange, onSettingsChanged }) {
   const { t, lang, setLang, langs } = useI18n()
   const initial = sourceParts(provider)
   const [engine, setEngine] = useState(initial.engine)
@@ -36,6 +39,17 @@ export default function SettingsModal({ state, mandatory, focus, onClose, onSave
   const [checkError, setCheckError] = useState('')
   const checkVersion = useRef(0)
   const [visualKey, setVisualKey] = useState('')
+  const [sessdata, setSessdata] = useState('')
+  // 清除 SESSDATA 是明確動作：一般儲存時欄位空白代表「不變」
+  const [removingSessdata, setRemovingSessdata] = useState(false)
+  const [browsers, setBrowsers] = useState([])
+  const [browser, setBrowser] = useState('')
+  const [cookieMsg, setCookieMsg] = useState('')
+  const [cookieErr, setCookieErr] = useState('')
+  const [cookieBusy, setCookieBusy] = useState(false)
+  // 偵測結果只在這次開啟設定頁有效；每次都由使用者重新觸發
+  const [probing, setProbing] = useState(false)
+  const [probed, setProbed] = useState(false)
   const [advancedOpen, setAdvancedOpen] = useState(focus === 'visual-key')
   const visualKeyRef = useRef(null)
   const [vault, setVault] = useState(state?.obsidian_vault_path || '')
@@ -47,7 +61,9 @@ export default function SettingsModal({ state, mandatory, focus, onClose, onSave
 
   const languages = state?.languages || [{ code: 'zh-Hant', label: '繁體中文' }, { code: 'en', label: 'English' }]
   const keyField = KEY_FIELDS[engine]
-  const keySaved = keyField && !!state?.[`${engine}_set`]
+  // 狀態欄位用底線（ollama_cloud_set），provider 代號用連字號（ollama-cloud）
+  const stateKey = engine.replace(/-/g, '_')
+  const keySaved = keyField && !!state?.[`${stateKey}_set`]
   const typedKey = keyField ? (keys[keyField] || '') : ''
   const isSmart = engine === 'smart'
   const verified = !!connection?.connected && connection.provider === engine
@@ -117,18 +133,72 @@ export default function SettingsModal({ state, mandatory, focus, onClose, onSave
 
   // 已設定金鑰不用再輸入；本機 Ollama 和智慧模式可直接檢查連線。
   // 只檢查目前所選的供應商，不同時向所有雲端服務發出請求。
+  // 只看會影響連線的設定；SESSDATA／vault 等變動時不要重跑（否則會作廢進行中的驗證）
+  const checkKey = connectionCheckKey({
+    engine, keySet: !!state?.[`${stateKey}_set`], ollamaUrl,
+  })
   useEffect(() => {
-    if (KEY_FIELDS[engine] && !state?.[`${engine}_set`]) return
+    if (KEY_FIELDS[engine] && !state?.[`${stateKey}_set`]) return
     if (KEY_FIELDS[engine] && keys[KEY_FIELDS[engine]]?.trim()) return
     checkProvider(engine, '', ollamaUrl)
-    return () => { ++checkVersion.current }
-  }, [engine, state])
+    // 作廢時也要把 checking 收掉：新的 effect 可能因為使用者正在輸入金鑰而提早 return
+    return () => { ++checkVersion.current; setChecking(false) }
+  }, [checkKey])
 
   useEffect(() => {
     if (focus !== 'visual-key') return
     visualKeyRef.current?.scrollIntoView({ block: 'center' })
     visualKeyRef.current?.focus()
   }, [focus])
+
+  // 讀取瀏覽器 cookie 檔（約 1–2 秒）必須由使用者按下按鈕才發生：
+  // 只是展開一個設定區塊不代表同意讓人讀登入憑證。
+  async function probeBrowsers() {
+    if (probing) return
+    setProbing(true); setCookieErr(''); setCookieMsg('')
+    try {
+      const r = await api.getBilibiliBrowsers()
+      setBrowsers(r?.browsers || [])
+      setProbed(true)
+    } catch (e) {
+      setCookieErr(t('settings.bilibiliProbeFailed', e.message))
+    } finally {
+      setProbing(false)
+    }
+  }
+
+  async function importCookie() {
+    if (!browser || cookieBusy) return
+    setCookieBusy(true); setCookieErr(''); setCookieMsg('')
+    try {
+      const next = await api.importBilibiliCookie(browser)
+      const label = browsers.find(b => b.browser === browser)?.label || browser
+      applyPartialSettings({ next, message: t('settings.bilibiliImportDone', label),
+        onChanged: onSettingsChanged, setMessage: setCookieMsg, setError: setCookieErr,
+        // 清掉手動貼上的草稿，否則之後按一般「儲存」會把舊草稿送出去、蓋掉剛匯入的 cookie
+        resetDraft: () => setSessdata('') })
+    } catch (e) {
+      setCookieErr(e.message)
+    } finally {
+      setCookieBusy(false)
+    }
+  }
+
+  async function removeSessdata() {
+    if (removingSessdata) return
+    setRemovingSessdata(true); setCookieErr(''); setCookieMsg('')
+    try {
+      // 明確送空字串：後端只有收到空字串才會清掉，欄位空白不會
+      const next = await api.saveSettings({ bilibili_sessdata: '' })
+      setSessdata('')
+      applyPartialSettings({ next, message: t('settings.bilibiliRemoveDone'),
+        onChanged: onSettingsChanged, setMessage: setCookieMsg, setError: setCookieErr })
+    } catch (e) {
+      setCookieErr(t('settings.bilibiliRemoveFailed', e.message))
+    } finally {
+      setRemovingSessdata(false)
+    }
+  }
 
   async function handleSave() {
     if (saveBlocked) return
@@ -147,6 +217,7 @@ export default function SettingsModal({ state, mandatory, focus, onClose, onSave
       output_language: outputLanguage,
       // 保留原有金鑰；只在驗證成功且使用者確認儲存時寫入新金鑰。
       ...(visualKey.trim() ? { gemini_api_key: visualKey.trim() } : {}),
+      ...(sessdata.trim() ? { bilibili_sessdata: sessdata.trim() } : {}),
       ...(typedKey.trim() && verified ? { [keyField]: typedKey.trim() } : {}),
     }
     setSaving(true)
@@ -203,7 +274,7 @@ export default function SettingsModal({ state, mandatory, focus, onClose, onSave
               <span className="settings-label">{t('ai.apiKey')}</span>
               <input type="password" autoComplete="off" spellCheck={false}
                 value={typedKey} onChange={e=>editKey(e.target.value)}
-                placeholder={keySaved ? t('settings.keySet', state?.[`${engine}_preview`] || '••••') : t('settings.keyPlaceholder')} />
+                placeholder={keySaved ? t('settings.keySet', state?.[`${stateKey}_preview`] || '••••') : t('settings.keyPlaceholder')} />
               <span className="settings-hint">{keySaved && !typedKey ? t('ai.savedKeyHint') : t('ai.keyHint')}</span>
             </label>}
             {engine === 'ollama' && <label className="settings-field">
@@ -262,6 +333,48 @@ export default function SettingsModal({ state, mandatory, focus, onClose, onSave
                 value={visualKey} onChange={e=>setVisualKey(e.target.value)}
                 placeholder={state?.gemini_set ? t('settings.keySet', state?.gemini_preview || '••••') : t('settings.keyPlaceholder')} />
               <span className="settings-hint">{t('settings.visualKeyHint')}</span>
+            </label>
+            <div className="settings-divider"><span>{t('settings.bilibili')}</span></div>
+            <div className="settings-field">
+              <span className="settings-label">{t('settings.bilibiliImport')}</span>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <button type="button" className="settings-cancel" onClick={probeBrowsers} disabled={probing}>
+                  {probing ? t('settings.bilibiliProbeBusy') : t('settings.bilibiliProbe')}
+                </button>
+                <select value={browser} onChange={e => setBrowser(e.target.value)}
+                  disabled={!browsers.some(b => b.state === 'ready')}>
+                  <option value="">{t('settings.bilibiliImportPick')}</option>
+                  {browsers.filter(b => b.state === 'ready').map(b =>
+                    <option key={b.browser} value={b.browser}>{b.label}</option>)}
+                </select>
+                <button type="button" className="settings-cancel"
+                  onClick={importCookie} disabled={!browser || cookieBusy}>
+                  {cookieBusy ? t('settings.bilibiliImportBusy') : t('settings.bilibiliImportAction')}
+                </button>
+              </div>
+              <span className="settings-hint">
+                {!probed
+                  ? t('settings.bilibiliProbeHint')
+                  : browsers.some(b => b.state === 'ready')
+                    ? t('settings.bilibiliImportHint')
+                    : t('settings.bilibiliImportNone')}
+                {browsers.filter(b => b.state === 'locked').map(b => ' · ' + t('settings.bilibiliBrowserLocked', b.label))}
+                {browsers.filter(b => b.state === 'no_session').map(b => ' · ' + t('settings.bilibiliBrowserNoSession', b.label))}
+              </span>
+              {cookieMsg && <span className="settings-hint">{cookieMsg}</span>}
+              {cookieErr && <span className="settings-err" role="alert">{cookieErr}</span>}
+            </div>
+            <label className="settings-field">
+              <span className="settings-label">{t('settings.bilibiliSessdata')}</span>
+              <input type="password" autoComplete="off" spellCheck={false}
+                value={sessdata} onChange={e=>setSessdata(e.target.value)}
+                placeholder={state?.bilibili_sessdata_set ? t('settings.keySet', state?.bilibili_sessdata_preview || '••••') : t('settings.bilibiliSessdataPlaceholder')} />
+              <span className="settings-hint">{t('settings.bilibiliSessdataHint')}</span>
+              {state?.bilibili_sessdata_set &&
+                <button type="button" className="settings-cancel" onClick={removeSessdata}
+                  disabled={removingSessdata}>
+                  {removingSessdata ? t('settings.bilibiliRemoving') : t('settings.bilibiliRemove')}
+                </button>}
             </label>
             <div className="settings-divider"><span>{t('settings.obsidian')}</span></div>
             <label className="settings-field">

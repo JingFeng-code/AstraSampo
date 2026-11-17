@@ -22,6 +22,10 @@ AstraTube can download these on request; the model is not included in the progra
 
 The desktop backend bundles sherpa-onnx (https://github.com/k2-fsa/sherpa-onnx, Apache-2.0) and PyAV (https://github.com/PyAV-Org/PyAV, BSD-3-Clause), which includes FFmpeg libraries under their own licenses.
 
+## Audio download
+
+The desktop backend bundles yt-dlp (https://github.com/yt-dlp/yt-dlp, Unlicense) to download the audio track when a video has no subtitles and local speech-to-text is used. yt-dlp is only used for content the user has the right to access; it is not bundled to bypass platform terms.
+
 ## Watch-along capture
 
 The desktop backend bundles windows-capture (https://github.com/NiiightmareXD/windows-capture, MIT) and comtypes (https://github.com/enthought/comtypes, MIT) to capture the AstraTube window and its own audio on Windows.

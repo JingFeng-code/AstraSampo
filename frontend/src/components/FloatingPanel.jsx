@@ -11,10 +11,10 @@ function writeMinimized(id, val) {
   try { localStorage.setItem(KEY_PREFIX + id, val ? '1' : '0') } catch {}
 }
 
-export default function FloatingPanel({ id, corner = 'br', title, badge, children, defaultMinimized = true }) {
+export default function FloatingPanel({ id, corner = 'br', title, badge, children, defaultMinimized = true, onToggle }) {
   const { t } = useI18n()
   const [minimized, setMinimized] = useState(() => readMinimized(id, defaultMinimized))
-  function toggle(next) { setMinimized(next); writeMinimized(id, next) }
+  function toggle(next) { setMinimized(next); writeMinimized(id, next); onToggle?.(next) }
   return (
     <div className={`float-panel ${corner}`}>
       {minimized ? (

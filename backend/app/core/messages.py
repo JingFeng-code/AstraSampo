@@ -26,6 +26,32 @@ LANGUAGES = ("zh-Hant", "en")
 # key 命名：<模組>.<情境>。值一律 str，需要變數就用 str.format 的具名欄位。
 MESSAGES: dict[str, dict[str, str]] = {
     # ── 設定 ────────────────────────────────────────────────
+    "settings.cookie_missing": {
+        "zh-Hant": "找不到 {browser} 的瀏覽器資料，請確認你有安裝並登入過 B 站。",
+        "en": "No {browser} profile found. Make sure the browser is installed and signed in to Bilibili.",
+    },
+    "settings.cookie_locked": {
+        "zh-Hant": "{browser} 的 cookie 被系統加密保護，目前讀不出來（Chrome／Edge 127 以後的已知限制）。"
+                   "請改用 Firefox，或手動貼上 SESSDATA。",
+        "en": "{browser} cookies are protected by App-Bound Encryption and cannot be read yet "
+              "(known Chrome/Edge 127+ limitation). Use Firefox, or paste SESSDATA manually.",
+    },
+    "settings.cookie_no_session": {
+        "zh-Hant": "{browser} 裡沒有 B 站登入狀態，請先在該瀏覽器登入 bilibili.com 再試一次。",
+        "en": "No Bilibili session in {browser}. Sign in to bilibili.com in that browser first.",
+    },
+    "settings.cookie_error": {
+        "zh-Hant": "讀取 {browser} 的 cookie 時發生錯誤：{error}",
+        "en": "Reading cookies from {browser} failed: {error}",
+    },
+    "settings.local_only": {
+        "zh-Hant": "讀取瀏覽器登入狀態只能在這台電腦上執行；遠端環境（例如 Codespaces）不會讀取你的 cookie。",
+        "en": "Reading browser sessions only works on this computer. Remote environments such as Codespaces will not read your cookies.",
+    },
+    "settings.bilibili_sessdata_invalid": {
+        "zh-Hant": "SESSDATA 格式不正確：不可含換行、分號或逗號，最長 512 字元。",
+        "en": "Invalid SESSDATA: no line breaks, semicolons or commas, and at most 512 characters.",
+    },
     "settings.save_failed": {
         "zh-Hant": "無法寫入設定檔：{error}",
         "en": "Could not write the settings file: {error}",
@@ -57,6 +83,22 @@ MESSAGES: dict[str, dict[str, str]] = {
         "zh-Hant": "筆記 %Y-%m-%d %H%M",
         "en": "Note %Y-%m-%d %H%M",
     },
+    "notes.export_local_only": {
+        "zh-Hant": "匯出的筆記只能存在這台電腦上；遠端環境（例如 Codespaces）不會幫你寫入檔案。",
+        "en": "Exported notes are only saved on this computer. Remote environments such as Codespaces will not write files for you.",
+    },
+    "notes.export_too_large": {
+        "zh-Hant": "筆記內容超過 2 MB，無法匯出。",
+        "en": "The note is larger than 2 MB and cannot be exported.",
+    },
+    "notes.export_failed": {
+        "zh-Hant": "無法寫入筆記檔：{error}",
+        "en": "Could not write the note file: {error}",
+    },
+    "notes.export_too_many": {
+        "zh-Hant": "同名的筆記檔太多，已停止匯出。請先整理「下載」資料夾裡的 AstraTube 筆記再試一次。",
+        "en": "Too many notes with the same name, so exporting stopped. Tidy up the AstraTube notes in your Downloads folder and try again.",
+    },
 
     # ── 問模型 ──────────────────────────────────────────────
     "ask.no_transcript": {
@@ -69,9 +111,21 @@ MESSAGES: dict[str, dict[str, str]] = {
     },
 
     # ── 摘要 ────────────────────────────────────────────────
+    "summarize.audio_local_only": {
+        "zh-Hant": "下載影片音訊只支援這台電腦上的 AstraTube；遠端環境不會幫你下載影片。",
+        "en": "Downloading video audio only works in AstraTube on this computer. Remote environments will not download videos for you.",
+    },
     "summarize.fetch_failed": {
         "zh-Hant": "無法取得這個網址的內容。請確認網址與網路後再試一次。",
         "en": "Could not fetch the content at this URL. Check the URL and your connection, then try again.",
+    },
+    "summarize.fallback_heading": {
+        "zh-Hant": "逐字稿重點",
+        "en": "Transcript highlights",
+    },
+    "summarize.fallback_model": {
+        "zh-Hant": "逐字稿（無模型輸出）",
+        "en": "transcript only (no model output)",
     },
     "summarize.all_segments_failed": {
         "zh-Hant": "摘要失敗：所有片段都無法產生，請稍後再試或換模型。",
@@ -263,36 +317,44 @@ MESSAGES: dict[str, dict[str, str]] = {
     },
     # ── 本機轉寫 ────────────────────────────────────────────
     "whisper.unavailable_desktop": {
-        "zh-Hant": "桌面版不會下載線上影片的聲音來轉成文字。"
-                   "可以用陪看模式邊播放邊在這台電腦記下聲音，或匯入你有權使用的 SRT／VTT 字幕檔後再按「開始」。",
-        "en": "The desktop app does not download online video audio for transcription. "
-              "Use watch-along mode to record it on this computer while it plays, or import an "
-              "SRT/VTT file you are allowed to use, then press Start.",
+        "zh-Hant": "這個環境沒有可用的語音轉錄引擎。桌面版請在錯誤訊息下方選擇「下載音訊並在本機轉成文字」；"
+                   "也可以用陪看模式邊播放邊記下聲音，或匯入你有權使用的 SRT／VTT 字幕檔後再按「開始」。",
+        "en": "No speech-to-text engine is available here. In the desktop app, choose "
+              "“Download audio and transcribe on this computer” below the error; you can also use "
+              "watch-along, or import an SRT/VTT file you are allowed to use.",
     },
     "whisper.downloader_missing": {
         "zh-Hant": "這個環境沒有安裝影片下載工具，無法下載音訊來轉錄語音。"
-                   "YouTube 影片可以匯入你有權使用的 SRT／VTT 字幕檔後再按「開始」。",
+                   "如果你有可以使用 SRT／VTT 字幕檔，可以匯入後再按「開始」。",
         "en": "The video download tool is not installed in this environment, so the audio "
-              "cannot be downloaded for transcription. For YouTube videos, import an SRT/VTT "
-              "file you are allowed to use, then press Start.",
+              "cannot be downloaded for transcription. If you have an SRT/VTT file you may "
+              "use, import it, then press Start.",
+    },
+    "whisper.too_long": {
+        "zh-Hant": "這支影片超過 {minutes} 分鐘的上限，已停止下載音訊。",
+        "en": "This video is longer than the {minutes}-minute limit, so the audio was not downloaded.",
+    },
+    "whisper.too_large": {
+        "zh-Hant": "這支影片的音訊超過 {mb} MB 的上限，已停止下載。",
+        "en": "This video's audio is larger than the {mb} MB limit, so it was not downloaded.",
     },
     "whisper.download_failed": {
         "zh-Hant": "無法下載此影片的音訊（可能不支援、需登入或已下架）。"
-                   "YouTube 影片可以匯入你有權使用的 SRT／VTT 字幕檔後再按「開始」。",
+                   "如果你有可以使用 SRT／VTT 字幕檔，可以匯入後再按「開始」。",
         "en": "Could not download this video's audio — it may be unsupported, private, or "
               "taken down. For YouTube videos, import an SRT/VTT file you are allowed to use, "
               "then press Start.",
     },
     "whisper.engine_missing": {
         "zh-Hant": "這個環境沒有安裝語音轉錄工具，無法改用語音辨識。"
-                   "YouTube 影片可以匯入你有權使用的 SRT／VTT 字幕檔後再按「開始」。",
+                   "如果你有可以使用 SRT／VTT 字幕檔，可以匯入後再按「開始」。",
         "en": "The speech-to-text tool is not installed in this environment, so the audio "
-              "cannot be transcribed. For YouTube videos, import an SRT/VTT file you are "
-              "allowed to use, then press Start.",
+              "cannot be transcribed. If you have an SRT/VTT file you may use, import it, "
+              "then press Start.",
     },
     "whisper.transcribe_failed": {
         "zh-Hant": "無法轉錄這段音訊，請稍後再試。"
-                   "YouTube 影片可以匯入你有權使用的 SRT／VTT 字幕檔後再按「開始」。",
+                   "如果你有可以使用 SRT／VTT 字幕檔，可以匯入後再按「開始」。",
         "en": "Could not transcribe this audio. Try again later. For YouTube videos, import "
               "an SRT/VTT file you are allowed to use, then press Start.",
     },
@@ -370,6 +432,10 @@ MESSAGES: dict[str, dict[str, str]] = {
         "zh-Hant": "最後一段還在處理，已停止擷取。請稍等一下，再按一次「完成並整理重點」。",
         "en": "The last part is still being processed and capture has stopped. Wait a moment, then press \"Finish and build cards\" again.",
     },
+    "watch.nothing_captured": {
+        "zh-Hant": "沒有錄到聲音，也沒有擷取到任何畫面。請確認影片在播放、播放器可見，且「看畫面的模型」沒有選成只看聲音。",
+        "en": "No audio and no frames were captured. Make sure the video is playing, the player is visible, and a screen model is selected.",
+    },
     "watch.nothing_heard": {
         "zh-Hant": "沒有錄到任何說話的聲音。請確認影片有在播放，而且聲音沒有被靜音。",
         "en": "No speech was captured. Make sure the video was playing and not muted.",
@@ -387,6 +453,46 @@ MESSAGES: dict[str, dict[str, str]] = {
     "provider.http_error": {
         "zh-Hant": "{vendor} HTTP {status}：{detail}",
         "en": "{vendor} HTTP {status}: {detail}",
+    },
+    "provider.empty_answer": {
+        "zh-Hant": "{vendor} 沒有回傳任何文字，請換一個模型再試。",
+        "en": "{vendor} returned no text. Try another model.",
+    },
+    "provider.ollama_cloud_no_key": {
+        "zh-Hant": "尚未設定 Ollama Cloud API key，請到「設定 → AI 來源 → Ollama Cloud」填入。",
+        "en": "No Ollama Cloud API key yet. Add one in Settings → AI source → Ollama Cloud.",
+    },
+    "provider.ollama_cloud_bad_key": {
+        "zh-Hant": "Ollama Cloud 金鑰無效或已撤銷，請到 ollama.com 重新建立後再填入。",
+        "en": "The Ollama Cloud key is invalid or revoked. Create a new one at ollama.com.",
+    },
+    "provider.ollama_cloud_connected": {
+        "zh-Hant": "已連線 Ollama Cloud，可用模型 {count} 個。",
+        "en": "Connected to Ollama Cloud with {count} models.",
+    },
+    "provider.ollama_cloud_no_model": {
+        "zh-Hant": "請先選擇一個 Ollama Cloud 模型。",
+        "en": "Pick an Ollama Cloud model first.",
+    },
+    "provider.ollama_cloud_rate_limited": {
+        "zh-Hant": "Ollama Cloud 目前限流或額度用盡，請稍後再試（可在 ollama.com 查看額度）。",
+        "en": "Ollama Cloud is rate limiting or out of quota. Try later (check usage on ollama.com).",
+    },
+    "provider.ollama_cloud_model_missing": {
+        "zh-Hant": "Ollama Cloud 上找不到模型 {model}，請在設定頁重新取得模型清單。",
+        "en": "Ollama Cloud does not have {model}. Refresh the model list in Settings.",
+    },
+    "provider.ollama_cloud_timeout": {
+        "zh-Hant": "Ollama Cloud 超過 5 分鐘沒有輸出，請換較小的模型或稍後再試。",
+        "en": "Ollama Cloud sent nothing for 5 minutes. Try a smaller model or later.",
+    },
+    "provider.ollama_cloud_bad_response": {
+        "zh-Hant": "Ollama Cloud 回應格式不正確，請稍後再試。",
+        "en": "Ollama Cloud returned an unexpected response. Try again.",
+    },
+    "provider.ollama_cloud_interrupted": {
+        "zh-Hant": "Ollama Cloud 回答到一半中斷，請再試一次。",
+        "en": "The Ollama Cloud answer was cut off. Please try again.",
     },
     "provider.hint_auth": {
         "zh-Hant": "服務拒絕存取：可能需要 API Key、金鑰無效，或目前網路／地區被限制。可在 AI 來源改用其他模型或本機 Ollama。",

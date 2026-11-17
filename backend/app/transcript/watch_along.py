@@ -61,6 +61,15 @@ def capture_supported() -> bool:
         return False
 
 
+def has_content(cues: list, visuals: list) -> bool:
+    """陪看結果值不值得保存：有語音或有畫面筆記都算。
+
+    純音樂／只有畫面的影片常常「字幕 0 句」，但畫面筆記是有效的分析素材，
+    不能因為沒有語音就把整份結果丟掉。
+    """
+    return bool(cues) or bool(visuals)
+
+
 def vision_models(base: str | None = None) -> list[str]:
     """只列出本機已安裝、而且 Ollama 回報支援看圖的模型；雲端模型一律排除。"""
     url = base or ollama.base_url()
@@ -141,6 +150,10 @@ class Session:
     last_audio_wall: float = 0.0
     last_loud_wall: float = 0.0
     error: str = ""
+    # 診斷用：擷取到幾張畫面、送進看圖模型幾次、模型判定「沒有內容」幾次
+    frame_count: int = 0
+    vision_tries: int = 0
+    vision_empty: int = 0
 
     def status(self) -> dict:
         language = config.get("OUTPUT_LANGUAGE")
@@ -149,6 +162,8 @@ class Session:
         return {"state": self.state, "platform": self.platform, "video_id": self.video_id, "page": self.page,
                 "elapsed": round(time.time() - self.started), "cue_count": len(self.cues),
                 "visual_count": len(self.visuals), "vision_model": self.vision_model,
+                "frame_count": self.frame_count, "vision_tries": self.vision_tries,
+                "vision_empty": self.vision_empty,
                 # 最近 3 秒有沒有聽到聲音：Bilibili 讀不到播放狀態，用這個判斷是不是暫停了
                 "audible": time.time() - self.last_loud_wall < 3,
                 "warnings": sorted(self.warnings), "error": self.error,
@@ -298,6 +313,8 @@ class Recorder:
             if since >= _MIN_GAP and (change >= _CHANGE or (since >= _MAX_GAP and change >= 2)):
                 previous[0] = small
                 last_key[0] = now
+                with self.lock:
+                    self.session.frame_count += 1
                 from PIL import Image
                 picture = Image.fromarray(image)
                 picture.thumbnail((1280, 720))
@@ -324,6 +341,8 @@ class Recorder:
                 if self.stop_event.is_set():
                     return
                 continue
+            with self.lock:
+                self.session.vision_tries += 1
             try:
                 text = self.describe(self.session.vision_model, picture)
             except Exception as exc:  # noqa: BLE001
@@ -334,6 +353,9 @@ class Recorder:
                 position = self._video_time(wall)  # 先算好再上鎖：_video_time 自己也要鎖
                 with self.lock:
                     self.session.visuals.append({"t": position, "text": text[:600]})
+            else:
+                with self.lock:
+                    self.session.vision_empty += 1
 
     def _fail(self, message: str) -> None:
         self.session.state = "error"
@@ -486,10 +508,19 @@ def finish() -> dict:
                   key=lambda cue: (cue["start"], cue["end"]))
     visuals = sorted(({"t": v["t"], "text": to_traditional(v["text"], language)} for v in session.visuals),
                      key=lambda item: item["t"])
-    if not cues:
+    # 沒有語音不等於失敗：純音樂／只有畫面的影片仍然可以有畫面筆記。
+    # 只有「兩者都沒有」才是真的沒有內容。
+    if not has_content(cues, visuals):
         session.state = "error"
-        session.error = session.error if failed else messages.t("watch.nothing_heard")
+        if failed:
+            session.error = session.error
+        elif session.vision_model and session.frame_count == 0:
+            session.error = messages.t("watch.nothing_captured")
+        else:
+            session.error = messages.t("watch.nothing_heard")
         return session.status()
+    if not cues:
+        session.warnings.add("visual_only")
     with _lock:
         # 等待期間使用者按了「放棄」：已經從 _current 移除，就不能再存檔
         if _current.get("recorder") is not recorder or session.state == "cancelled":

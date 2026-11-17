@@ -1,6 +1,6 @@
-# Smaller desktop-alpha backend profile. The optional heavy Whisper/yt-dlp
-# transcription pipeline is deliberately NOT bundled in this first installer.
-# Local video speech-to-text uses sherpa-onnx; its model is downloaded on request.
+# Smaller desktop-alpha backend profile. faster-whisper is deliberately NOT
+# bundled; no-subtitle videos go through yt-dlp (library mode, pure Python) into
+# the bundled sherpa-onnx engine, whose model is downloaded on request.
 fastapi>=0.115.0
 uvicorn>=0.34.0
 python-dotenv>=1.0.1
@@ -14,6 +14,7 @@ json-repair>=0.30.0
 opencc-python-reimplemented
 av>=11,<16
 sherpa-onnx>=1.12,<2
+yt-dlp>=2025.1.1
 # 陪看模式：擷取 AstraTube 自己的畫面與聲音（只在 Windows 使用）
 comtypes>=1.4
 windows-capture>=2.0,<3

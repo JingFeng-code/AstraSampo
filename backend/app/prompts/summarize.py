@@ -200,3 +200,37 @@ tutorial、concept、interview、review、news、other 選擇一種。
 "actionable":false,"action_hint":null}}]}}
 影片逐字稿：
 {content["text"]}"""
+
+
+_OVERVIEW_SYSTEM = """你是知識整理的收尾助手。使用者已經拿到這支影片的卡片，現在需要一段**整體總結**，
+讓他在 30 秒內知道「這支影片到底在講什麼、重點是哪幾件事」。
+
+鐵則：
+1. 只能使用卡片裡的資訊，不要補充卡片沒說的事。
+2. 回覆必須是單一 JSON 物件：{"summary": "2-3 句話說明影片主旨與結論", "points": ["重點一", "重點二", ...]}
+3. points 3-6 條，每條一句話、具體（含數字、名稱、做法），不要寫「介紹了很多技巧」這種空話。
+4. 一律使用指定的輸出語言。"""
+
+
+def overview_system(language: str) -> str:
+    lang = languages.get(language)
+    return lang.directive + chr(10) + chr(10) + _OVERVIEW_SYSTEM
+
+
+def overview_prompt(cards: list, title: str | None = None, language: str = languages.DEFAULT) -> str:
+    """把卡片壓成清單交給模型做整體總結。"""
+    lang = languages.get(language)
+    lines = []
+    for card in cards[:30]:
+        heading = str(card.get("heading") or "").strip()
+        summary = " ".join(str(card.get("summary") or "").split())[:220]
+        if heading or summary:
+            lines.append(f"- {heading}：{summary}")
+    head = (f"影片標題：{title}" + chr(10)) if title else ""
+    return f"""{lang.directive}
+
+{head}以下是這支影片的卡片（標題：內容）：
+
+{chr(10).join(lines)}
+
+請輸出 JSON：{{"summary": "...", "points": ["...", "..."]}}"""

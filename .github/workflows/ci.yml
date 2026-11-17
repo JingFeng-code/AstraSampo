@@ -52,6 +52,7 @@ jobs:
           python tests/test_local_access.py
           python tests/test_cloud_fallback.py
           python tests/test_settings_persistence.py
+          python tests/test_settings_sessdata.py
           python tests/test_desktop_transcription.py
           python tests/test_whisper_errors.py
           python tests/test_subtitles.py
@@ -59,6 +60,14 @@ jobs:
           python tests/test_local_speech.py
           python tests/test_watch_along.py
           python tests/test_subtitle_translation.py
+          python tests/test_browser_cookies.py
+          python tests/test_bilibili_cookie_access.py
+          python tests/test_ollama_cloud.py
+          python tests/test_summarize_fallback.py
+          python tests/test_audio_download.py
+          python tests/test_whisper_cancel.py
+          python tests/test_watch_visual_only.py
+          python tests/test_notes_export.py
 
   frontend:
     name: Frontend build

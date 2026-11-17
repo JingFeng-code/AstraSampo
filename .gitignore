@@ -16,6 +16,9 @@ npm-debug.log*
 # Transcript cache (regenerated on demand, can be large)
 .cache/
 
+# 開發模式下「下載」不能寫時的匯出退路（使用者產出，不是專案檔案）
+/exports/
+
 # OS / editor
 .DS_Store
 Thumbs.db

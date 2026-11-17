@@ -13,10 +13,11 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from typing import Optional, Tuple
+from typing import Callable, Optional, Tuple
 
 from app.core import config, messages
 from app.transcript import cache
+from app.transcript.cancel import TranscriptionCancelled
 
 _model = None
 _model_size: Optional[str] = None
@@ -70,15 +71,26 @@ def download_audio(url: str, tmpdir: str) -> str:
     return files[0]
 
 
-def transcribe_file(path: str) -> Tuple[str, bool]:
-    """轉寫本機音檔，回傳 (帶時間戳逐字稿, is_chinese)。"""
+def transcribe_file(path: str, cancelled: Optional[Callable[[], bool]] = None) -> Tuple[str, bool]:
+    """轉寫本機音檔，回傳 (帶時間戳逐字稿, is_chinese)。
+
+    cancelled 由呼叫端提供（按停止／連線中斷）；每解碼一段就檢查，取消就立刻中止。
+    """
     try:
         model = _get_model()
         # beam_size=1（貪婪）較快；關閉 condition_on_previous_text 避免長音訊重複迴圈
         segments, info = model.transcribe(path, vad_filter=True, beam_size=1,
                                           condition_on_previous_text=False)
         # segments 是惰性產生器，解碼錯誤（訊息可能含暫存檔路徑）會在這裡才發生
-        lines = [f"[{int(s.start)}] {(s.text or '').strip()}" for s in segments if (s.text or "").strip()]
+        lines = []
+        for segment in segments:
+            if cancelled and cancelled():
+                raise TranscriptionCancelled()
+            text_line = (segment.text or "").strip()
+            if text_line:
+                lines.append(f"[{int(segment.start)}] {text_line}")
+    except TranscriptionCancelled:
+        raise
     except ModuleNotFoundError as e:
         _log_failure("缺少語音轉錄套件", e)
         raise ValueError(messages.t("whisper.engine_missing"))

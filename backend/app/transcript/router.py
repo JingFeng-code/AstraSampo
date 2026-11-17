@@ -3,6 +3,7 @@
 轉錄瀑布（任一層失敗自動落到下一層）：
   預設        1. captions（免費秒回）→ 2. deepsrt（需 GEMINI_API_KEY）→ 3. whisper 本機轉寫
   深視覺模式  1. deepsrt（連畫面/簡報一起讀）→ 2. captions → 3. whisper
+  Bilibili    1. 字幕（有 SESSDATA 才讀得到需登入的字幕）→ 2. yt-dlp 抓音訊 → 本機轉錄
 
 深視覺模式下若字幕也拿得到，會把字幕當成口說逐字稿的**時間軸基準**交給 DeepSRT：
 Gemini 的畫面時間戳準、口說時間戳會單調漂移（實測片尾差到 +98 秒），
@@ -11,9 +12,10 @@ Gemini 的畫面時間戳準、口說時間戳會單調漂移（實測片尾差�
 from typing import Optional, TypedDict
 from urllib.parse import urlparse
 
+from app.core import config
 from app.llm import gemini
 from app.services.article_fetcher import fetch_article
-from app.transcript import bilibili, captions, deepsrt, whisper_local, imported_subtitles
+from app.transcript import audio_transcript, bilibili, captions, deepsrt, whisper_local, imported_subtitles
 
 
 class Content(TypedDict):
@@ -25,7 +27,7 @@ class Content(TypedDict):
     is_chinese: bool
     has_timestamps: bool
     bilibili_page: Optional[int]  # Bilibili 分 P，其他來源為 None
-    transcript_source: Optional[str]  # deepsrt / deepsrt+captions / captions / whisper / local_speech；文章為 None
+    transcript_source: Optional[str]  # deepsrt／deepsrt+captions／captions／bilibili_captions／bilibili_ai_captions／local_speech／whisper；文章為 None
 
 
 def _fetch_captions(video_id: str,
@@ -103,11 +105,15 @@ def _pack(kind: str, video_id: Optional[str], text: str, is_chinese: bool,
                    is_chinese=is_chinese, has_timestamps=True, transcript_source=source)
 
 
-def route_content(url: str, deep_visual: bool = False, allow_cloud_fallback: bool = True) -> Content:
+def route_content(url: str, deep_visual: bool = False, allow_cloud_fallback: bool = True,
+                  allow_audio_download: bool = False,
+                  cancelled=None, on_progress=None) -> Content:
     """依網址型態取得內容。取不到會拋出例外（ValueError 代表使用者輸入問題）。
 
     allow_cloud_fallback 只影響「字幕失敗後是否自動改用 Gemini DeepSRT」；
     使用者主動開啟深視覺時仍照常使用 Gemini。
+    allow_audio_download 只有使用者按了確認才會是 True；而且只有「確定沒有字幕」
+    或「字幕需要登入」才會改走音訊下載，其他錯誤一律原樣往上拋。
     """
     local_id = imported_subtitles.local_id_from_url(url)
     if local_id:
@@ -131,8 +137,31 @@ def route_content(url: str, deep_visual: bool = False, allow_cloud_fallback: boo
                            uploaded["is_chinese"], imported_subtitles.source_label(uploaded))
             result["bilibili_page"] = page
             return result
-        text, is_chinese = bilibili.fetch_transcript(bvid, page)
-        result = _pack("bilibili", bvid, text, is_chinese, "bilibili_captions")
+        # 有 SESSDATA 才讀得到需要登入的字幕；沒有就只讀公開字幕，行為與從前相同。
+        try:
+            text, is_chinese, _lang, is_ai = bilibili.fetch_transcript_detail(
+                bvid, page, config.get("BILIBILI_SESSDATA"))
+        except ValueError as caption_error:
+            # 只有使用者明確同意，而且字幕是「確實沒有」或「需要登入」時才下載音訊。
+            # 網路錯誤、分 P 不存在、SESSDATA 格式錯誤、被平台攔截都不算——直接回原錯誤。
+            can_download = allow_audio_download and isinstance(
+                caption_error, (bilibili.NoSubtitleError, bilibili.LoginRequiredError))
+            if not can_download:
+                raise
+            # 快取綁 cid：不同分 P 或內容被換掉的影片不能互相命中
+            cid = getattr(caption_error, "cid", None)
+            cache_key = f"bilibili:{bvid}:{cid}" if cid else f"bilibili:{bvid}:p{page}"
+            try:
+                text, is_chinese, source = audio_transcript.transcribe(
+                    url, cache_key=cache_key, cancelled=cancelled, on_progress=on_progress)
+            except audio_transcript.AudioCancelled:
+                raise
+            except ValueError as whisper_error:
+                # 兩段訊息都保留，才不會蓋掉真正的原因
+                raise ValueError(f"{caption_error} {whisper_error}") from whisper_error
+        else:
+            source = "bilibili_ai_captions" if is_ai else "bilibili_captions"
+        result = _pack("bilibili", bvid, text, is_chinese, source)
         result["bilibili_page"] = page
         return result
 

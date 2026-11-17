@@ -167,6 +167,12 @@ export default function WatchAlong({ target, provider, onFinished, onClose }) {
         <i aria-hidden="true" />{t(`watch.state.${phase}`, shownClock)}
       </span>
       <span className="watch-counts">{t('watch.counts', session.cue_count || 0, session.visual_count || 0)}</span>
+      {vision !== VISION_OFF && (
+        <span className="watch-hint" role="status">
+          {t('watch.captureStats', session.frame_count || 0, session.vision_tries || 0,
+             session.vision_empty || 0)}
+        </span>
+      )}
       <button type="button" className={`import-start watch-primary ${phase === 'ended' ? 'is-ready' : ''}`} onClick={finish} disabled={busy}>
         {t(busy ? 'watch.finishing' : 'watch.finish')}
       </button>
@@ -213,6 +219,8 @@ export default function WatchAlong({ target, provider, onFinished, onClose }) {
       {warnings.includes('frames_unavailable') && <p className="import-error" role="alert">{t('watch.framesUnavailable')}</p>}
       {warnings.includes('vision_failed') && <p className="watch-hint">{t('watch.visionFailed')}</p>}
       {(error || session.error) && <p className="import-error" role="alert">{error || session.error}</p>}
+      {(session.warnings || []).includes('visual_only') && !session.error &&
+        <p className="watch-hint">{t('watch.visualOnly')}</p>}
       {running && session.recent?.length > 0 && <ul className="watch-recent">
         {session.recent.map((line, index) => <li key={index}><span>{formatClock(line.t)}</span>{line.text}</li>)}
       </ul>}
