@@ -252,7 +252,9 @@ button:disabled{cursor:not-allowed}
 .notes{display:flex;flex-direction:column;gap:12px}
 .float-window-body .notes{position:static;max-height:none}
 .notes-head{display:flex;align-items:center;gap:8px}.notes-head h3{margin:0;font-size:14px}.notes-head .count{margin-left:auto;color:var(--text-faint);font:600 12px/1 var(--mono)}
-.clip-list{display:flex;flex-direction:column;gap:8px;min-height:40px;overflow-y:auto}
+.clip-list{display:flex;flex-direction:column;gap:8px;min-height:40px;overflow-y:auto;max-height:min(38vh,340px)}
+/* 動作列固定在面板底部：31 則筆記時也不用捲過整份清單才按得到下載 */
+.notes-actions{position:sticky;bottom:0;z-index:2;display:flex;flex-direction:column;gap:10px;padding:10px 0 2px;background:var(--surface);border-top:1px solid var(--border)}
 .clip-item{padding:10px;border-left:3px solid var(--accent);border-radius:0 var(--radius-control) var(--radius-control) 0;background:var(--surface-2);font-size:13px}
 .clip-head{display:flex;align-items:baseline;gap:7px}.clip-head strong{flex:1;color:var(--text);font-weight:700;line-height:1.45}.clip-item .ts{color:var(--accent);font:650 12px/1 var(--mono)}
 .clip-item .rm{border:0;background:transparent;color:var(--text-faint);font-size:16px;line-height:1}.clip-item .rm:hover{color:var(--danger)}
@@ -267,7 +269,10 @@ button:disabled{cursor:not-allowed}
 .mode-toggle button{border:0;border-radius:var(--radius-small);background:transparent;color:var(--text-faint);padding:6px;font-size:13px}.mode-toggle button.on{background:var(--accent-soft);color:var(--accent);font-weight:750}
 .cfg-note,.save-hint{margin:0;color:var(--text-faint);font-size:12px;line-height:1.55}.btn-save{width:100%;min-height:40px;border:1px solid var(--accent);border-radius:var(--radius-control);background:var(--accent);color:var(--on-accent);font-weight:800;transition:all .2s ease}.btn-save:hover:not(:disabled){background:var(--accent-hover);border-color:var(--accent-hover)}.btn-save:disabled{opacity:.45}
 /* 次要動作（複製 Markdown、全部收進筆記…）不用主要色，才看得出哪個是主要按鈕 */
-.notes .btn-paper.notes-copy{width:100%;min-height:40px}
+.notes .btn-paper.notes-action{width:100%;min-height:40px}
+.notes-clear-confirm{display:flex;align-items:center;flex-wrap:wrap;gap:8px;color:var(--danger);font-size:13px;line-height:1.5}
+.notes-clear-confirm button{min-height:34px;font-size:13px}
+.notes-clear-confirm .danger{color:var(--danger);border-color:var(--danger)}
 /* 存檔路徑要留著給人看和複製：可選取、長路徑折行，不撐破面板 */
 .notes-last-saved{display:flex;gap:6px;margin:0;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-small);background:var(--surface-2);font-size:12px;line-height:1.5;color:var(--text-soft)}
 .notes-last-saved .cfg-label{width:auto;flex-shrink:0}
