@@ -19,12 +19,13 @@ import useNotesVault from './hooks/useNotesVault.js'
 import { useI18n } from './i18n/index.jsx'
 import { DEEP_VISUAL_KEY, deepVisualNotice, effectiveDeepVisual, isBilibiliUrl } from './utils/user-mode.js'
 import { detectSource, needsSubtitleImport, noCaptionAction, sourceHintKey } from './utils/source-info.js'
-import { createNoteMarkdown, markdownFilename } from './utils/notes-export.js'
+import { createNoteMarkdown, downloadMarkdown, markdownFilename, saveNoteMarkdown } from './utils/notes-export.js'
 import { NARROW_QUERY, effectiveResultTab, resultTabs } from './utils/result-tabs.js'
 import { isVideoFile, localVideoId, localVideoUrl } from './utils/local-video.js'
 import { watchTarget } from './utils/watch.js'
 import WatchAlong from './components/WatchAlong.jsx'
-import { getWatchStatus } from './api.js'
+import { getDesktopConnection } from './desktop.js'
+import { getWatchStatus, exportNoteMarkdown } from './api.js'
 import LocalSpeechControls from './components/LocalSpeechControls.jsx'
 
 // 本機工作階段持久化：整理結果、卡片索引、筆記草稿都存在瀏覽器裡，重開仍在。
@@ -174,16 +175,23 @@ export default function App() {
   }
 
   function handleExportNotes(){
-    const markdown=createNoteMarkdown({title:filename||result?.title||t('note.summary'),sourceUrl:noteSource,clips:cardsHook.clips,freeNote})
-    const blob=new Blob([markdown],{type:'text/markdown;charset=utf-8'})
-    const href=URL.createObjectURL(blob)
-    const element=document.createElement('a')
-    element.href=href
-    element.download=markdownFilename(filename||result?.title||t('note.summary'))
-    document.body.appendChild(element)
-    element.click()
-    element.remove()
-    setTimeout(()=>URL.revokeObjectURL(href),1000)
+    const title=filename||result?.title||t('note.summary')
+    const markdown=createNoteMarkdown({title,sourceUrl:noteSource,clips:cardsHook.clips,freeNote})
+    saveNoteMarkdown({
+      markdown, filename:markdownFilename(title), isDesktop:!!getDesktopConnection(), t,
+      saveToBackend:exportNoteMarkdown,
+      downloadInBrowser:downloadMarkdown,
+    }).then(r=>showToast(r.message,!r.ok))
+  }
+
+  async function handleCopyNotes(){
+    const title=filename||result?.title||t('note.summary')
+    const markdown=createNoteMarkdown({title,sourceUrl:noteSource,clips:cardsHook.clips,freeNote})
+    try{
+      if(!navigator.clipboard?.writeText)throw new Error(t('notes.clipboardUnavailable'))
+      await navigator.clipboard.writeText(markdown)
+      showToast(t('toast.copied'))
+    }catch(e){showToast(t('toast.copyFailed',e?.message||String(e)),true)}
   }
 
   useEffect(()=>{function onKey(e){const tag=document.activeElement?.tagName;if(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT')return;if(!cards.length)return;if(e.key==='ArrowRight')cardsHook.jumpToCard(Math.min(cardsHook.index+1,cards.length-1),false);else if(e.key==='ArrowLeft')cardsHook.jumpToCard(Math.max(cardsHook.index-1,0),false);else if(e.key.toLowerCase()==='n')clipCard(cardsHook.index)};window.addEventListener('keydown',onKey);return()=>window.removeEventListener('keydown',onKey)})
@@ -274,7 +282,7 @@ export default function App() {
       {/* 筆記／問模型：可最小化浮窗，不佔用主版面，展開/收合狀態記在 localStorage */}
       {result&&<>
         <FloatingPanel id="notes" corner="br" title={t('panel.notes')} badge={cardsHook.clips.length||null}>
-          <NotesPanel onExport={handleExportNotes} vault={notes.vault} clips={cardsHook.clips} onClipNoteChange={cardsHook.updateClipNote} onRemoveClip={cardsHook.removeClip} freeNote={freeNote} setFreeNote={setFreeNote} filename={filename} setFilename={setFilename} onSave={handleSave} saving={notes.saving} folders={notes.folders} noteFiles={notes.noteFiles} saveOpts={notes.saveOpts} onSaveOptsChange={notes.onSaveOptsChange}/>
+          <NotesPanel onExport={handleExportNotes} onCopy={handleCopyNotes} vault={notes.vault} clips={cardsHook.clips} onClipNoteChange={cardsHook.updateClipNote} onRemoveClip={cardsHook.removeClip} freeNote={freeNote} setFreeNote={setFreeNote} filename={filename} setFilename={setFilename} onSave={handleSave} saving={notes.saving} folders={notes.folders} noteFiles={notes.noteFiles} saveOpts={notes.saveOpts} onSaveOptsChange={notes.onSaveOptsChange}/>
         </FloatingPanel>
         <FloatingPanel id="ask" corner="bl" title={t('panel.ask')}>
           <AskPanel provider={activeProvider} videoId={result?.local_video_id?`local:${result.local_video_id}`:result?.youtube_video_id||(result?.bilibili_video_id?`bilibili:${result.bilibili_video_id}:p${result.bilibili_page||1}`:null)}/>

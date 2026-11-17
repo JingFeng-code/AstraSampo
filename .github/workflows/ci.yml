@@ -63,6 +63,7 @@ jobs:
           python tests/test_ollama_cloud.py
           python tests/test_summarize_fallback.py
           python tests/test_watch_visual_only.py
+          python tests/test_notes_export.py
 
   frontend:
     name: Frontend build

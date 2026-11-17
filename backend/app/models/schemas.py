@@ -47,6 +47,12 @@ class DeepDiveRequest(BaseModel):
     card: Card
 
 
+class ExportNoteRequest(BaseModel):
+    """桌面版匯出 Markdown：檔名與內容都由前端產生，後端只負責清理檔名與寫檔。"""
+    filename: str = ""
+    markdown: str = ""
+
+
 class SaveNoteRequest(BaseModel):
     filename: str
     content: str

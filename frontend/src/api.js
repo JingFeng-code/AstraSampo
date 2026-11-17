@@ -77,6 +77,8 @@ export const importedSubtitleStatus = videoUrl => post('/subtitles/imported/stat
 export const translateSubtitles = (platform, videoId, page=1, startIndex=0, batchSize=16, translationProvider='opencode') =>
   post('/subtitles/translate', {platform, video_id:videoId, page, start_index:startIndex, batch_size:batchSize, translation_provider:translationProvider})
 export const saveNote  = (payload) => post('/notes/save', payload)
+// 桌面版匯出：Tauri 沒有下載管理員，<a download> 不會產生檔案，改由後端寫檔
+export const exportNoteMarkdown = (filename, markdown) => post('/notes/export', {filename, markdown})
 export const getSpeechStatus = () => get('/local-video/speech')
 export const getWatchStatus = () => get('/watch/status')
 export const getWatchVisionModels = () => get('/watch/vision-models')

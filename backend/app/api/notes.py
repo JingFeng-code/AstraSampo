@@ -4,10 +4,11 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
+from app.api.local_video import on_this_computer
 from app.core import config, messages
-from app.models.schemas import SaveNoteRequest
+from app.models.schemas import ExportNoteRequest, SaveNoteRequest
 
 router = APIRouter(prefix="/notes", tags=["notes"])
 
@@ -50,6 +51,50 @@ def _safe_filename(name: str) -> str:
     if not name.lower().endswith(".md"):
         name += ".md"
     return name
+
+
+# 匯出上限：整份筆記是模型輸出，正常只有幾十 KB；2 MB 足夠，也避免被拿來寫大檔
+_EXPORT_LIMIT = 2 * 1024 * 1024
+_EXPORT_FOLDER = "AstraTube"
+
+
+def _downloads_root() -> Path:
+    return Path.home() / "Downloads"
+
+
+def _exports_root() -> Path:
+    """「下載」不能寫時的退路：程式自己的資料夾（桌面版會指向使用者資料目錄）。"""
+    data = os.environ.get("ASTRA_DESKTOP_DATA_DIR")
+    return (Path(data) if data else Path(__file__).resolve().parents[3]) / "exports"
+
+
+def _export_name(name: str) -> str:
+    """匯出檔名：只取名稱本身（不含路徑與副檔名），長度留給「 (2)」這種後綴。"""
+    base = _safe_name(name)
+    if base.lower().endswith(".md"):
+        base = base[:-3]
+    # Windows 不接受結尾的點與空白，清掉以免寫檔直接失敗
+    base = base.strip().rstrip(". ")
+    return base[:110] or "AstraTube-notes"
+
+
+def _unique_path(folder: Path, base: str) -> Path:
+    """同名時加 (2)、(3)…，不覆蓋使用者既有的筆記。"""
+    path = folder / f"{base}.md"
+    _ensure_within(folder, path)
+    i = 2
+    while path.exists():
+        path = folder / f"{base} ({i}).md"
+        _ensure_within(folder, path)
+        i += 1
+    return path
+
+
+def _write_export(folder: Path, base: str, text: str) -> Path:
+    folder.mkdir(parents=True, exist_ok=True)
+    path = _unique_path(folder, base)
+    path.write_text(text if text.endswith("\n") else text + "\n", encoding="utf-8")
+    return path
 
 
 def _ensure_within(root: Path, target: Path) -> Path:
@@ -109,6 +154,32 @@ def files(folder: str = ""):
         key=str.lower,
     )
     return {"files": fs}
+
+
+@router.post("/export")
+def export_note(req: ExportNoteRequest, request: Request) -> dict:
+    """把 Markdown 存進使用者的下載資料夾。
+
+    桌面版（Tauri／WebView2）沒有瀏覽器的下載管理員，前端用 <a download> 按了不會有檔案，
+    所以寫檔這件事必須由後端做；也只接受這台電腦上的請求，不讓遠端服務寫入本機檔案。
+    """
+    client = request.client.host if request.client else None
+    if not on_this_computer(client, request.headers.get("origin")):
+        raise HTTPException(403, messages.t("notes.export_local_only"))
+    text = req.markdown or ""
+    if len(text.encode("utf-8")) > _EXPORT_LIMIT:
+        raise HTTPException(413, messages.t("notes.export_too_large"))
+    base = _export_name(req.filename)
+    try:
+        path = _write_export(_downloads_root() / _EXPORT_FOLDER, base, text)
+        return {"saved_to": str(path), "fallback": False}
+    except OSError:
+        # 免安裝版或受控環境可能不能寫「下載」資料夾：改存程式資料夾並在畫面說明
+        try:
+            path = _write_export(_exports_root(), base, text)
+            return {"saved_to": str(path), "fallback": True}
+        except OSError as exc:
+            raise HTTPException(500, messages.t("notes.export_failed", error=str(exc))) from exc
 
 
 @router.post("/save")
