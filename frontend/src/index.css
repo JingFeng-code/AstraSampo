@@ -167,11 +167,19 @@ button:disabled{cursor:not-allowed}
 .chapter.active{background:var(--accent-soft);border-left-color:var(--accent);color:var(--text)}
 .chapter .ts{font-family:var(--mono);font-size:12px;color:var(--accent);font-variant-numeric:tabular-nums}
 
-.deck{display:flex;flex-direction:column}
-.deck-head{display:flex;align-items:center;gap:8px;margin-bottom:12px;min-width:0}
-.deck-title{margin:0;min-width:0;flex:1 1 auto;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;color:var(--text);font-size:16px;font-weight:750;letter-spacing:-.015em}
+.deck{display:flex;flex-direction:column;padding-bottom:88px}
+.deck-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:12px;min-width:0}
+.deck-title{margin:0;min-width:0;flex:1 1 320px;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;color:var(--text);font-size:16px;font-weight:750;letter-spacing:-.015em}
+/* 標題塞不下時，模型／來源／張數／進階工具整組換到第二行，而不是各自被切斷 */
+.deck-meta{display:flex;align-items:center;gap:8px;flex:1 1 auto;min-width:0;flex-wrap:nowrap}
+/* 空間真的不夠時先讓模型名稱用省略號收窄（滑鼠移上去看得到全文；鍵盤聚焦沒有提示），
+   來源、張數與進階工具一律保留完整 */
+.deck-meta .model-badge{flex:0 1 auto}
 .deck-count{margin-left:auto;color:var(--text-faint);font:600 12px/1 var(--mono);font-variant-numeric:tabular-nums;flex-shrink:0}
-.model-badge{max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border:1px solid var(--border);border-radius:var(--radius-small);background:var(--surface-2);color:var(--text);padding:4px 7px;font:600 12px/1.2 var(--mono)}
+.model-badge{max-width:100%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border:1px solid var(--border);border-radius:var(--radius-small);background:var(--surface-2);color:var(--text);padding:4px 7px;font:600 12px/1.2 var(--mono)}
+/* 來源標籤很短（例如「陪看模式」），任何寬度下都要完整顯示 */
+.deck-meta .deck-source{flex-shrink:0;max-width:none}
+.deck-meta .deck-advanced{flex-shrink:0}
 .deck-nav{display:flex;align-items:center;gap:10px;margin-bottom:12px}
 .deck-nav-top{position:sticky;top:8px;z-index:3;background:var(--surface);padding:4px 0}
 .nav-arrow{width:38px;height:34px;flex-shrink:0;border:1px solid var(--border);border-radius:var(--radius-control);background:var(--surface);color:var(--text);font-size:16px;transition:all .2s ease}
@@ -282,7 +290,7 @@ button:disabled{cursor:not-allowed}
   .workspace{grid-template-columns:minmax(0,1fr);gap:14px}.splitter{display:none}.pane-video,.deck{grid-column:1;min-width:0}.chapters{max-height:30vh}
 }
 @media(max-width:720px){
-  .topbar{flex-wrap:wrap}.vault-chip{order:3;margin-left:49px}.input-row{grid-template-columns:1fr 1fr}.url-field{grid-column:1/-1}.model-field{grid-column:1}.deep-visual-toggle{grid-column:2;grid-row:auto;width:100%}.btn-go{grid-column:1/-1;grid-row:auto;width:100%}.workspace{padding-inline:12px}.model-badge{max-width:120px}.float-panel.br{right:12px;bottom:12px}.float-panel.bl{left:12px;bottom:12px}.float-window{width:calc(100vw - 24px)}
+  .topbar{flex-wrap:wrap}.vault-chip{order:3;margin-left:49px}.input-row{grid-template-columns:1fr 1fr}.url-field{grid-column:1/-1}.model-field{grid-column:1}.deep-visual-toggle{grid-column:2;grid-row:auto;width:100%}.btn-go{grid-column:1/-1;grid-row:auto;width:100%}.workspace{padding-inline:12px}.model-badge{max-width:100%}.float-panel.br{right:12px;bottom:12px}.float-panel.bl{left:12px;bottom:12px}.float-window{width:calc(100vw - 24px)}
 }
 @media(max-width:480px){
   .topbar{gap:8px}.brand{width:100%}.vault-chip{margin-left:0}.input-row{grid-template-columns:1fr}.model-field,.deep-visual-toggle{grid-column:1}.card{padding:21px 17px}.card h2{font-size:23px}.empty-state{padding:34px 24px}.deck-head{flex-wrap:wrap}.deck-count{order:2}.settings-head,.settings-body,.settings-foot{padding-left:18px;padding-right:18px}
@@ -577,7 +585,7 @@ button:disabled{cursor:not-allowed}
   /* 底部留白避免最後幾行被浮動按鈕蓋住 */
   .workspace-split .subtitles-panel,.workspace-split .chapters{flex:1 1 0;min-height:0;max-height:none;overflow-y:auto;margin:10px 0 0;padding-bottom:56px}
   .workspace-split .subtitles-list{max-height:none;overflow:visible}
-  .workspace-split .deck{overflow-y:auto;padding-bottom:64px}
+  .workspace-split .deck{overflow-y:auto;padding-bottom:104px}
   .workspace-split .deck>*{flex-shrink:0}
   .workspace-split .deck-nav-top{top:0}
 }
