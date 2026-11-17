@@ -107,6 +107,10 @@ MESSAGES: dict[str, dict[str, str]] = {
     },
 
     # ── 摘要 ────────────────────────────────────────────────
+    "summarize.audio_local_only": {
+        "zh-Hant": "下載影片音訊只支援這台電腦上的 AstraTube；遠端環境不會幫你下載影片。",
+        "en": "Downloading video audio only works in AstraTube on this computer. Remote environments will not download videos for you.",
+    },
     "summarize.fetch_failed": {
         "zh-Hant": "無法取得這個網址的內容。請確認網址與網路後再試一次。",
         "en": "Could not fetch the content at this URL. Check the URL and your connection, then try again.",
@@ -321,6 +325,14 @@ MESSAGES: dict[str, dict[str, str]] = {
         "en": "The video download tool is not installed in this environment, so the audio "
               "cannot be downloaded for transcription. For YouTube videos, import an SRT/VTT "
               "file you are allowed to use, then press Start.",
+    },
+    "whisper.too_long": {
+        "zh-Hant": "這支影片超過 {minutes} 分鐘的上限，已停止下載音訊。",
+        "en": "This video is longer than the {minutes}-minute limit, so the audio was not downloaded.",
+    },
+    "whisper.too_large": {
+        "zh-Hant": "這支影片的音訊超過 {mb} MB 的上限，已停止下載。",
+        "en": "This video's audio is larger than the {mb} MB limit, so it was not downloaded.",
     },
     "whisper.download_failed": {
         "zh-Hant": "無法下載此影片的音訊（可能不支援、需登入或已下架）。"

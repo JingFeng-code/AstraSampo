@@ -18,7 +18,8 @@ import useCards from './hooks/useCards.js'
 import useNotesVault from './hooks/useNotesVault.js'
 import { useI18n } from './i18n/index.jsx'
 import { DEEP_VISUAL_KEY, deepVisualNotice, effectiveDeepVisual, isBilibiliUrl } from './utils/user-mode.js'
-import { detectSource, needsSubtitleImport, noCaptionAction, sourceHintKey } from './utils/source-info.js'
+import { canOfferAudioDownload, detectSource, needsSubtitleImport, noCaptionAction, sourceHintKey } from './utils/source-info.js'
+import { sourceProgressLabel } from './utils/progress-label.js'
 import { createNoteMarkdown, downloadMarkdown, markdownFilename, saveNoteMarkdown } from './utils/notes-export.js'
 import { noteVideoKey, resolveNoteFilename } from './utils/note-filename.js'
 import { NARROW_QUERY, effectiveResultTab, resultTabs } from './utils/result-tabs.js'
@@ -29,6 +30,7 @@ import WatchAlong from './components/WatchAlong.jsx'
 import { getDesktopConnection } from './desktop.js'
 import { getWatchStatus, exportNoteMarkdown } from './api.js'
 import LocalSpeechControls from './components/LocalSpeechControls.jsx'
+import AudioDownloadPrompt from './components/AudioDownloadPrompt.jsx'
 
 // 本機工作階段持久化：整理結果、卡片索引、筆記草稿都存在瀏覽器裡，重開仍在。
 const SKEY='ycr-session-v1'
@@ -60,15 +62,18 @@ function GenerationProgress({ progress }){
   const seg=Number.isInteger(progress.seg)?t('progress.segment',progress.seg+1):t('progress.preparing')
   const model=progress.model?` · ${progress.model}`:''
   const apiName=progress.provider==='opencode'?'OpenCode':(progress.provider||'API')
-  let label=t('progress.generate')
-  if(progress.stage==='source') label=t('progress.source')
-  else if(progress.phase==='coverage') label=t('progress.coverage',seg,model)
-  else if(progress.state==='rate_wait') label=t('progress.rateWait',seg,apiName,progress.delay||0)
-  else if(progress.state==='retry_wait') label=t('progress.retry',seg,apiName,progress.delay||0,progress.attempt||'',progress.tries||'')
-  else if(progress.state==='model_switch') label=t('progress.modelSwitch',seg,progress.model)
-  else if(progress.state==='key_switch') label=t('progress.keySwitch',seg)
-  else if(progress.state==='request') label=t('progress.waiting',seg,model,(progress.attempt||1)>1?t('progress.retrySuffix',progress.attempt,progress.tries):'')
-  else if(progress.state==='next') label=completed<total?t('progress.next',completed+1):t('progress.done')
+  // 下載音訊／本機轉錄可能跑好幾分鐘，要讓畫面看得到現在在做什麼
+  const sourceLabel=sourceProgressLabel(progress,t)
+  let label=sourceLabel||t('progress.generate')
+  if(!sourceLabel){
+    if(progress.phase==='coverage') label=t('progress.coverage',seg,model)
+    else if(progress.state==='rate_wait') label=t('progress.rateWait',seg,apiName,progress.delay||0)
+    else if(progress.state==='retry_wait') label=t('progress.retry',seg,apiName,progress.delay||0,progress.attempt||'',progress.tries||'')
+    else if(progress.state==='model_switch') label=t('progress.modelSwitch',seg,progress.model)
+    else if(progress.state==='key_switch') label=t('progress.keySwitch',seg)
+    else if(progress.state==='request') label=t('progress.waiting',seg,model,(progress.attempt||1)>1?t('progress.retrySuffix',progress.attempt,progress.tries):'')
+    else if(progress.state==='next') label=completed<total?t('progress.next',completed+1):t('progress.done')
+  }
   return <div className="generation-progress" role="progressbar" aria-label={label} aria-valuemin="0" aria-valuemax={total||undefined} aria-valuenow={total?completed:undefined}>
     <div className="generation-meta"><span className="generation-label">{label}</span><span className="generation-count">{total>0?`${completed} / ${total} · `:''}{clock}</span></div>
     <div className="generation-track"><span style={{transform:`scaleX(${ratio})`}}/></div>
@@ -159,10 +164,11 @@ export default function App() {
   const [watching,setWatching]=useState(false)
   useEffect(()=>{getWatchStatus().then(r=>setWatchAvailable(!!r.available)).catch(()=>{})},[])
   function finishWatching(){setWatching(false);startAnalysis(false)}
-  async function startAnalysis(useVisual){
+  // allowAudio：只有使用者在錯誤區塊按下「確定下載」才會是 true
+  async function startAnalysis(useVisual,allowAudio=false){
     if(!activeProvider){setShowSettings(true);showToast(t('ai.notReady'),true);return}
     cardsHook.resetForNewResult()
-    await stream.summarize(isLocalMode?localUrl:url,activeProvider,useVisual,isLocalMode?localVideo?.name:null)
+    await stream.summarize(isLocalMode?localUrl:url,activeProvider,useVisual,isLocalMode?localVideo?.name:null,allowAudio)
   }
   const handleSummarize=()=>startAnalysis(!isLocalMode&&effectiveDeepVisual(deepVisual,url))
   async function pickLocalVideo(event){
@@ -245,6 +251,8 @@ export default function App() {
   const source=isLocalMode?'local':detectSource(url)
   const showSourceHint=!!source&&(isLocalMode?!compact:(!compact||url.trim()!==(result?.source_url||'').trim()))
   const errorNeedsImport=needsSubtitleImport(stream.error)
+  // Bilibili 沒有字幕（或需要登入）時，才提供「下載音訊並在本機轉錄」這條路
+  const canDownloadAudio=!isLocalMode&&canOfferAudioDownload(source,stream.errorCode)
   const watchVideo=!isLocalMode&&watchAvailable?watchTarget(url):null
   const watchOffer=watchVideo&&<div className="no-caption-option"><span>{t('watch.offer')}</span><button type="button" className="btn-paper" onClick={()=>setWatching(true)}>{t('watch.open')}</button></div>
   const captionAction=errorNeedsImport?noCaptionAction(source,deepVisual,!!providers?.gemini?.configured):null
@@ -303,7 +311,7 @@ export default function App() {
       <GenerationProgress progress={stream.progress}/>
       {showLocalSubtitleRow&&<div className="local-subtitle-row">{localSubtitleControls}{localSpeechControls}</div>}
       {/* 進入陪看後把「整理失敗」與匯入、讀畫面等選項收起來，畫面留給陪看；關掉陪看就恢復 */}
-      {stream.error&&!(watching&&watchVideo)&&<div className="error-block"><p className="error-bar">{stream.error}</p>{errorNeedsImport&&!isLocalMode&&<SubtitleImportControls videoUrl={url} onChanged={()=>setSubtitleRevision(v=>v+1)} onAnalyze={handleSummarize} noFileHint={watchVideo?t('subtitles.importNoFileWatch'):captionAction?t('subtitles.importNoFileVisual'):undefined}/>}{errorNeedsImport&&watchOffer}{captionAction&&<div className="no-caption-option"><span>{t(captionAction==='add-key'?'noCaption.addKey':'noCaption.enableVisual')}</span>{captionAction==='add-key'?<button type="button" className="btn-paper" onClick={openVisualKeySettings}>{t('noCaption.addKeyAction')}</button>:<button type="button" className="btn-paper" onClick={analyzeWithVisual}>{t('noCaption.enableVisualAction')}</button>}</div>}</div>}
+      {stream.error&&!(watching&&watchVideo)&&<div className="error-block"><p className="error-bar">{stream.error}</p>{errorNeedsImport&&!isLocalMode&&<SubtitleImportControls videoUrl={url} onChanged={()=>setSubtitleRevision(v=>v+1)} onAnalyze={handleSummarize} noFileHint={watchVideo?t('subtitles.importNoFileWatch'):captionAction?t('subtitles.importNoFileVisual'):undefined}/>}{errorNeedsImport&&watchOffer}{canDownloadAudio&&<AudioDownloadPrompt busy={stream.loading||!!stream.progress} onConfirm={()=>startAnalysis(false,true)}/>}{captionAction&&<div className="no-caption-option"><span>{t(captionAction==='add-key'?'noCaption.addKey':'noCaption.enableVisual')}</span>{captionAction==='add-key'?<button type="button" className="btn-paper" onClick={openVisualKeySettings}>{t('noCaption.addKeyAction')}</button>:<button type="button" className="btn-paper" onClick={analyzeWithVisual}>{t('noCaption.enableVisualAction')}</button>}</div>}</div>}
       {stream.notice&&<p className="error-bar" role="status">{stream.notice}</p>}
       {stream.stopped&&<p className="error-bar" role="status">{t(result?.cards?.length?'input.stoppedPartial':'input.stopped')}</p>}
       {/* 有影片時左右並排；純文章來源則讓重點區佔滿 */}

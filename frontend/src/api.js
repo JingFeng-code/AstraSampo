@@ -42,8 +42,8 @@ async function postStream(path, body, onEvent, signal) {
 }
 export const summarize = (url, provider, deep_visual=false) => post('/summarize', {url, provider, deep_visual})
 // 串流版：邊生成邊回傳。segment_status 會帶出 API 等待、重試與模型切換狀態。
-export const summarizeStream = (url, provider, deep_visual=false, onEvent, signal) =>
-  postStream('/summarize_stream', {url, provider, deep_visual}, onEvent, signal)
+export const summarizeStream = (url, provider, deep_visual=false, onEvent, signal, allow_audio_download=false) =>
+  postStream('/summarize_stream', {url, provider, deep_visual, allow_audio_download}, onEvent, signal)
 export const deepdive  = (provider, source_title, card) => post('/deepdive', {provider, source_title, card})
 // 實作：把整支影片交給本機 CLI agent 產出實體檔案。
 // status 先問「這台機器有沒有 CLI」，前端據此決定顯示執行、指令、還是安裝教學。

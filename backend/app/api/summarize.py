@@ -1,12 +1,13 @@
 """摘要相關端點：/summarize（一次回全部）、/summarize_stream（NDJSON 串流）、/deepdive。"""
 import json
 import re
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from queue import Empty, Queue
 from typing import Any, Callable, Iterator, Tuple
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from starlette.concurrency import iterate_in_threadpool
 from json_repair import repair_json
@@ -23,6 +24,8 @@ from app.prompts.summarize import (deepdive_prompt, deepdive_system,
                                    budget_summarize_prompt, budget_summarize_system,
                                    overview_prompt, overview_system)
 from app.services.chunker import MAX_CHUNKS, chunk_content
+from app.api.local_video import on_this_computer
+from app.transcript import bilibili
 from app.transcript.router import Content, route_content
 
 router = APIRouter(tags=["summarize"])
@@ -130,13 +133,40 @@ def _split(content: Content, provider: str | None) -> Tuple[list[str], int]:
     return chunks[:MAX_CHUNKS], max(0, len(chunks) - MAX_CHUNKS)
 
 
+def _source_progress(info: dict) -> dict:
+    """把 audio_transcript 的進度轉成串流事件契約。
+
+    來源階段固定是 stage="source"，下載／轉錄放在 state；直接用 {**info} 會把
+    stage 蓋成 "download"，前端就認不出來、只能顯示預設的「整理重點」。
+    """
+    return {"type": "progress", "stage": "source", "state": info.get("stage"),
+            "percent": info.get("percent")}
+
+
+_FATAL_CODES = {
+    bilibili.NoSubtitleError: "bilibili_no_subtitle",
+    bilibili.LoginRequiredError: "bilibili_login_required",
+}
+
+
+def _require_local_audio(req: SummarizeRequest, request: Request | None) -> None:
+    """下載影片音訊只在真正跑在這台電腦上的 AstraTube 才接受。"""
+    if not req.allow_audio_download:
+        return
+    client = request.client.host if request and request.client else None
+    origin = request.headers.get("origin") if request is not None else None
+    if not on_this_computer(client, origin):
+        raise HTTPException(403, messages.t("summarize.audio_local_only"))
+
+
 def _prepare(req: SummarizeRequest) -> Tuple[Content, list[str], bool, int]:
     """擷取內容並切段，回傳 (內容, 片段列表, 是否多段, 略過的段數)。"""
     if not llm_router.is_explicit(req.provider):
         raise HTTPException(400, messages.t("llm.no_provider"))
     try:
         content = route_content(req.url, deep_visual=req.deep_visual,
-                                    allow_cloud_fallback=_allows_cloud_transcription(req.provider))
+                                    allow_cloud_fallback=_allows_cloud_transcription(req.provider),
+                                    allow_audio_download=req.allow_audio_download)
     except ValueError as e:
         raise HTTPException(400, str(e))
     except Exception as e:  # noqa: BLE001
@@ -305,8 +335,9 @@ def _run_segment(req: SummarizeRequest, content: Content, chunk: str,
 
 
 @router.post("/summarize")
-def summarize(req: SummarizeRequest) -> dict:
+def summarize(req: SummarizeRequest, request: Request = None) -> dict:
     """一次回傳全部卡片（不串流）。單一片段失敗會跳過，全部失敗才報錯。"""
+    _require_local_audio(req, request)
     content, chunks, multi, skipped = _prepare(req)
 
     all_cards: list[dict] = []
@@ -359,13 +390,14 @@ def summarize(req: SummarizeRequest) -> dict:
 
 
 @router.post("/summarize_stream")
-def summarize_stream(req: SummarizeRequest) -> StreamingResponse:
+def summarize_stream(req: SummarizeRequest, request: Request = None) -> StreamingResponse:
     """串流版摘要（NDJSON，每行一個事件）。
 
     事件：progress → meta → title → cards（每段一批）→ done；單段失敗發
     seg_error 但不中斷，致命錯誤發 fatal 後結束。內容擷取移入 generator，
     讓前端能在字幕與文章擷取開始時立即顯示真實工作階段。
     """
+    _require_local_audio(req, request)
     stream = _stream_events(req)
 
     async def body():
@@ -394,18 +426,67 @@ def _stream_events(req: SummarizeRequest) -> Iterator[str]:
         if not llm_router.is_explicit(req.provider):
             yield line({"type": "fatal", "error": messages.t("llm.no_provider")})
             return
+        # 內容擷取（含下載音訊、本機轉錄）可能在背景跑好幾分鐘：
+        # 放進執行緒，外層每 0.5 秒送心跳，連線中斷時才能立刻設定取消旗標。
+        cancel = threading.Event()
+        progress: Queue = Queue()
+        holder: dict[str, Any] = {}
+
+        def fetch() -> None:
+            try:
+                holder["content"] = route_content(
+                    req.url, deep_visual=req.deep_visual,
+                    allow_cloud_fallback=_allows_cloud_transcription(req.provider),
+                    allow_audio_download=req.allow_audio_download,
+                    cancelled=cancel.is_set,
+                    on_progress=progress.put)
+            except BaseException as exc:  # noqa: BLE001
+                holder["error"] = exc
+
+        worker = threading.Thread(target=fetch, daemon=True)
+        worker.start()
         try:
-            content = route_content(req.url, deep_visual=req.deep_visual,
-                                    allow_cloud_fallback=_allows_cloud_transcription(req.provider))
-            profile = summary_budget(req.provider)
-            chunks, skipped = _split(content, req.provider)
-        except ValueError as e:
-            yield line({"type": "fatal", "error": str(e)})
+            while worker.is_alive():
+                worker.join(timeout=0.5)
+                forwarded = False
+                while True:
+                    try:
+                        info = progress.get_nowait()
+                    except Empty:
+                        break
+                    forwarded = True
+                    yield line(_source_progress(info))
+                if not forwarded:
+                    # 心跳：讓伺服器每 0.5 秒有機會發現使用者已經按了停止
+                    yield ""
+            while True:  # 收尾：把最後一批進度送完
+                try:
+                    info = progress.get_nowait()
+                except Empty:
+                    break
+                yield line(_source_progress(info))
+        finally:
+            if worker.is_alive():
+                # 使用者按停止或連線中斷：通知下載／轉寫中止（暫存檔由 audio_transcript 清掉）
+                cancel.set()
+
+        error = holder.get("error")
+        if isinstance(error, ValueError):
+            # 錯誤文字會跟著介面語言變；前端要靠 code 決定要不要提供下載音訊的選項
+            code = next((value for kind, value in _FATAL_CODES.items()
+                         if isinstance(error, kind)), None)
+            payload = {"type": "fatal", "error": str(error)}
+            if code:
+                payload["code"] = code
+            yield line(payload)
             return
-        except Exception as e:  # noqa: BLE001
-            print(f"[summarize] 內容擷取失敗：{e!a}", flush=True)
+        if error is not None:
+            print(f"[summarize] 內容擷取失敗：{error!a}", flush=True)
             yield line({"type": "fatal", "error": messages.t("summarize.fetch_failed")})
             return
+        content = holder["content"]
+        profile = summary_budget(req.provider)
+        chunks, skipped = _split(content, req.provider)
 
         multi = len(chunks) > 1
         workers = profile.workers if profile else llm_router.parallel_workers(req.provider, len(chunks))

@@ -21,6 +21,14 @@ _MAX_SUBTITLE_BYTES = 12 * 1024 * 1024
 _SESSDATA_MAX = 512
 
 
+class NoSubtitleError(ValueError):
+    """確定沒有可公開取得的字幕（不是網路或權限問題）。"""
+
+
+class LoginRequiredError(ValueError):
+    """字幕需要登入，而目前沒有可用的 SESSDATA。"""
+
+
 def _cookie_header(sessdata: str | None) -> dict[str, str]:
     """把使用者提供的 SESSDATA 轉成 Cookie 標頭；沒提供就回空字典。"""
     value = (sessdata or "").strip()
@@ -165,15 +173,20 @@ def fetch_transcript_detail(bvid: str, page: int = 1,
     player = _api_json("/x/player/v2", {"bvid": bvid, "cid": cid}, referer, cookie)
     subtitles = (player.get("subtitle") or {}).get("subtitles") or []
     if not subtitles:
+        # 帶上 cid：呼叫端決定改走本機轉錄時，快取要綁 cid，不同分 P 不能混用
         if player.get("need_login_subtitle"):
             if cookie:
-                raise ValueError("這支 Bilibili 影片的字幕需要登入才能讀取，但你設定的 SESSDATA "
-                                 "沒有取得字幕（可能已過期）。請重新複製 SESSDATA 後再試。")
-            raise ValueError("這支 Bilibili 影片的字幕需要登入才能讀取。在設定頁貼上你自己的 "
-                             "SESSDATA 後可以讀取，AstraTube 不會代替你登入。"
-                             "如果你有這支影片可使用的字幕檔，也可以匯入 SRT／VTT 後再分析。")
-        raise ValueError("這支 Bilibili 影片沒有可公開取得的字幕，AstraTube 不會下載影音來轉錄。"
-                         "如果你有這支影片可使用的字幕檔，可以匯入 SRT／VTT 後再分析。")
+                error = LoginRequiredError("這支 Bilibili 影片的字幕需要登入才能讀取，但你設定的 SESSDATA "
+                                           "沒有取得字幕（可能已過期）。請重新複製 SESSDATA 後再試。")
+            else:
+                error = LoginRequiredError("這支 Bilibili 影片的字幕需要登入才能讀取。在設定頁貼上你自己的 "
+                                           "SESSDATA 後可以讀取，AstraTube 不會代替你登入。"
+                                           "如果你有這支影片可使用的字幕檔，也可以匯入 SRT／VTT 後再分析。")
+        else:
+            error = NoSubtitleError("這支 Bilibili 影片沒有可公開取得的字幕。"
+                                    "如果你有這支影片可使用的字幕檔，可以匯入 SRT／VTT 後再分析。")
+        error.cid = cid
+        raise error
 
     def rank(item: dict) -> tuple:
         lang = str(item.get("lan") or "").lower()

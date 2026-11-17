@@ -27,6 +27,8 @@ class SummarizeRequest(BaseModel):
     provider: Optional[str] = None
     # 深視覺：True 時 DeepSRT（Gemini 讀畫面）優先於字幕；預設關（字幕優先，省 Gemini 額度）
     deep_visual: bool = False
+    # 使用者按下「下載音訊並在本機轉成文字」才會是 True；後端也只在這台電腦上接受
+    allow_audio_download: bool = False
 
 
 class AskMessage(BaseModel):
