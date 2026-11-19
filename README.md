@@ -1,14 +1,16 @@
-# AstraTube
+# AstraSampo
 
-## 名稱由來｜Astra Mythos
+## 名稱由來｜Astra Mythos 神器系列
 
-AstraTube 的品牌靈感來自日本神話中以舞蹈表演著稱的天鈿女命（Ame-no-Uzume）。從表演與影像傳達訊息的意象，延伸為從影音中整理可學習的內容。
+**新品牌顯示名稱：AstraSampo**。目前 GitHub repository 仍是 [`JingFeng-code/AstraTube`](https://github.com/JingFeng-code/AstraTube)；這次僅更新品牌文字，尚未改 GitHub Repository 名稱。
 
-- **Astra**：星辰的意象，象徵知識、探索與方向。
-- **Tube**：Tube 呼應網路影音平台，呼應本專案「影音字幕閱讀與 AI 學習」的用途。
-- **AstraTube**：世界神話靈感的現代產品命名，並非神話人物名稱或古代語言的直譯。
+- **神器原型**：芬蘭《卡勒瓦拉》中的 Sampo 神奇器物。
+- **傳說中的能力與考證界線**：傳說與財富產生相關，但其具體形制有不同詮釋，不應斷言唯一樣貌。
+- **軟體對應能力（現代品牌比喻）**：將影片與字幕轉化為可用的學習成果。
+- **實際產品定位**：AI 影音字幕閱讀、摘要及學習工作台。
+- **技術相容性**：既有 `AstraTube` 程式命名、影片平台整合及部署流程維持不變。
 
-品牌連結是藝術表演意象，不宣稱神話人物具有現代影片分析或 AI 職能。
+**全系列命名規範的唯一維護來源**：[Astra Mythos｜神器系列品牌規範](https://github.com/JingFeng-code/AstraLore/blob/main/06-%E5%8F%83%E8%80%83/Astra-Mythos/ASTRA_MYTHOS.md)，位於工程筆記庫 AstraLore；本專案不另存品牌規範副本。
 
 ---
 
