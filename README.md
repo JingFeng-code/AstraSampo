@@ -1,4 +1,10 @@
-# AstraTube
+# AstraTube## 名稱由來｜Astra Mythos
+AstraTube 的品牌靈感來自日本神話中以舞蹈表演著稱的天鈿女命（Ame-no-Uzume）。從表演與影像傳達訊息的意象，延伸為從影音中整理可學習的內容。
+- **Astra**：星辰的意象，象徵知識、探索與方向。
+- **Tube**：Tube 呼應網路影音平台，呼應本專案「影音字幕閱讀與 AI 學習」的用途。
+- **AstraTube**：世界神話靈感的現代產品命名，並非神話人物名稱或古代語言的直譯。
+品牌連結是藝術表演意象，不宣稱神話人物具有現代影片分析或 AI 職能。
+---
 
 個人使用的 AI 影片學習與實作工作台。以 [YouTube Card Reader](https://github.com/chang416/youtube-card-reader) 為基底，目標是保留既有影片知識卡、影片問答、Obsidian 匯出與 Codex / Claude Code 任務產生功能，逐步加入台灣繁體中文體驗、Ollama 與同步雙語字幕。
 
